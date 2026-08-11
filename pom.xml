@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      T34 Faz 7 — sahte kur satıcısı.
+
+      BU PROJE CRM'İN PARÇASI DEĞİLDİR ve bu bilinçlidir:
+        * Parent olarak backend'in parent'ı DEĞİL, doğrudan spring-boot-starter-parent kullanılır.
+        * backend/pom.xml reaktörüne <module> olarak EKLENMEZ.
+      "Dış hizmet" iddiası ancak servis gerçekten dışarıda durursa test edilebilir; reaktöre
+      girseydi CRM ile birlikte derlenir, birlikte sürümlenir ve birlikte kırılırdı — yani
+      taklit ettiği şey olmaktan çıkardı. frontend/ ile aynı gerekçe.
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.0.7</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.ohbsy</groupId>
+    <artifactId>currency-api</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <name>currency-api</name>
+    <description>TCMB ve ECB kur uçlarını taklit eden sahte satıcı (T34 Faz 7)</description>
+
+    <properties>
+        <java.version>25</java.version>
+    </properties>
+
+    <dependencies>
+        <!-- Tek bağımlılık: web. DB yok, kur tablosu bellekte (bir test ikilisidir). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
