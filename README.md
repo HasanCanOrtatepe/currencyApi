@@ -88,6 +88,9 @@ curl "localhost:8095/api/v1/rates?symbols=USD,EUR"
 | `currency-api.cache.retention` | `7d` | Saklama: tazelik dolsa da kayıt silinmez |
 | `currency-api.tcmb.base-url` | `https://www.tcmb.gov.tr` | |
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | yalnız `type=redis` iken |
+| `CURRENCY_AUTH_ENABLED` | `false` | anahtar doğrulaması (401) |
+| `CURRENCY_API_KEYS` | — | `anahtar=tuketici,anahtar2=tuketici2` |
+| `CURRENCY_RATE_LIMIT` | `120` | tüketici başına dakikalık kota (429) |
 
 Sıfır konfigürasyonla çalışır: hiçbir ayar verilmeden gerçek TCMB'den kur çeker.
 
@@ -95,6 +98,40 @@ Sıfır konfigürasyonla çalışır: hiçbir ayar verilmeden gerçek TCMB'den k
 > birim testi bile altyapı gerektirir ve "test edilebilir" iddiası boşa çıkar. Üretimde birden
 > çok instance varsa `redis` olmalıdır: bellekte tutulursa her instance kendi kurunu çeker
 > (satıcı isteği instance sayısıyla çarpılır) ve iki instance **farklı kur** döndürebilir.
+
+## Anahtar ve kota (ticari API davranışı)
+
+Servis, kendisini ticari bir API gibi sunabilir: istek `X-API-Key` header'ı ister ve her tüketici
+için dakikalık bir kota uygular. **İkisi de varsayılan olarak kapalıya yakındır** — anahtar
+doğrulaması kapalı, kota açık ama cömert (120/dk).
+
+```bash
+CURRENCY_AUTH_ENABLED=true CURRENCY_API_KEYS="$(openssl rand -hex 24)=crm" mvn spring-boot:run
+curl -H "X-API-Key: <anahtar>" "localhost:8095/api/v1/rates?symbols=USD"
+```
+
+| Durum | Cevap |
+|---|---|
+| Anahtar yok / tanınmıyor | `401` — istek servise **inmez**, anahtar cevaba sızmaz |
+| Kota içinde | `200` + `X-RateLimit-Limit` / `X-RateLimit-Remaining` |
+| Kota aşıldı | `429` + `Retry-After` (tüketici ne zaman döneceğini tahmin etmek zorunda kalmaz) |
+| `/actuator/**` | anahtar istemez — orkestratörün elinde anahtar yoktur |
+
+**Kota neden cömert:** düzgün davranan bir tüketici bu sınıra hiç yaklaşmaz. CRM ölçüldü
+(2026-08-12): kotası 3/dk'ya sabitlenmiş bir servise karşı **12 CRM isteği yalnız 1 üst istek**
+üretti — kendi 15 dakikalık cache'i araya girdiği için. Sınır, doğru davranan tüketiciyi kısmak
+için değil, cache'i devre dışı kalan ya da döngüye giren bir tüketicinin yarıçapını sınırlamak
+içindir. Aynı ölçümde CRM cache'i kasten devre dışı bırakıldığında kota doldu, servis `429`
+döndü ve **CRM'in ucu yine 200 döndü** (`degraded=true`): kota aşımı gösterimi kısar, satışı
+durdurmaz.
+
+> **Anahtar YAML'de map ANAHTARI olarak yazılamaz.** İlk kurulum
+> `keys: "[${CURRENCY_CRM_KEY}]": crm` biçimindeydi ve **sessizce** bozuktu: YAML map
+> anahtarındaki yer tutucu çözülmez (çözüm değerlere uygulanır), servis ortam değişkeninin
+> *adını* anahtar sanar ve doğru anahtarla gelen istek bile 401 alır. Yapılandırma doğru
+> *görünür*, birim testler geçer, yalnız canlı istek reddedilir. Bu yüzden anahtarlar tek bir
+> dizgiden (`CURRENCY_API_KEYS`) ayrıştırılır ve bağlama `CurrencyApiPropertiesTest` ile
+> kilitlidir.
 
 ## Simülatör yüzü (tüketici testleri)
 

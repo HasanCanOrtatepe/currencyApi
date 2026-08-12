@@ -29,6 +29,23 @@ currency-api:
     base-url: ${TCMB_BASE_URL:https://www.tcmb.gov.tr}
     connect-timeout: 5s
     read-timeout: 10s
+  auth:
+    # Varsayılan KAPALI: açık gelseydi anahtar tanımlamamış her kurulum bir anda 401 alırdı.
+    # Açıldığında anahtarsız istek kesinlikle reddedilir; anahtar tanımlı değilse servis
+    # AÇILIŞTA düşer (sessizce her şeyi 401'lemesindense gürültülü hata).
+    enabled: ${CURRENCY_AUTH_ENABLED:false}
+    # "anahtar=tuketici,anahtar2=tuketici2" — DEĞER YALNIZ ORTAM DEĞİŞKENİNDEN gelir; buraya
+    # gerçek bir anahtar yazmak onu depoya sokmak demektir ve geri alınamaz.
+    #
+    # Map anahtarı olarak YAZILAMAZ: YAML'de map ANAHTARI içindeki ${ENV} yer tutucusu
+    # çözülmez ve doğru anahtarla gelen istek bile 401 alır (ölçülerek öğrenildi).
+    key-spec: ${CURRENCY_API_KEYS:}
+  rate-limit:
+    enabled: true
+    # Cömert: cache'ini kullanan tüketici saatte ~4 istek atar, bu sınıra yaklaşmaz.
+    # Sınır, cache'i devre dışı kalan ya da döngüye giren tüketici içindir.
+    limit: ${CURRENCY_RATE_LIMIT:120}
+    window: 1m
 
 management:
   endpoints:

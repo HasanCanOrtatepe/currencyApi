@@ -4,6 +4,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Servis ayarları ({@code currency-api.*}).
@@ -18,6 +20,8 @@ public class CurrencyApiProperties {
 
     private final Cache cache = new Cache();
     private final Tcmb tcmb = new Tcmb();
+    private final Auth auth = new Auth();
+    private final RateLimit rateLimit = new RateLimit();
 
     public Cache getCache() {
         return cache;
@@ -25,6 +29,121 @@ public class CurrencyApiProperties {
 
     public Tcmb getTcmb() {
         return tcmb;
+    }
+
+    public Auth getAuth() {
+        return auth;
+    }
+
+    public RateLimit getRateLimit() {
+        return rateLimit;
+    }
+
+    /**
+     * API anahtarı doğrulaması.
+     *
+     * <p><b>Varsayılan KAPALI ve bu bilinçlidir:</b> açık gelseydi anahtar tanımlamamış her
+     * kurulum bir anda 401 alırdı. Açmak bir dağıtım kararıdır; açıldığında ise anahtarsız
+     * istek kesinlikle reddedilir.
+     *
+     * <p><b>Anahtar değerleri koda/Config'e YAZILMAZ</b> — yalnız ortam değişkeninden
+     * (`.env`) gelir. Depoya giren bir anahtar, geri alınamaz biçimde yanmıştır.
+     */
+    public static class Auth {
+
+        private boolean enabled = false;
+
+        /**
+         * {@code anahtar → tüketici adı}. Ad yalnız log/metrik içindir: "hangi tüketici kotayı
+         * doldurdu" sorusu anahtarla değil <b>adla</b> cevaplanmalıdır, çünkü anahtar loglara
+         * girmemelidir.
+         */
+        private Map<String, String> keys = new LinkedHashMap<>();
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public Map<String, String> getKeys() {
+            return keys;
+        }
+
+        /**
+         * Anahtarlar <b>tek bir dizgiden</b> okunur: {@code "anahtar1=crm,anahtar2=reporting"}.
+         *
+         * <p><b>Neden map değil</b> (ölçülerek öğrenildi): YAML'de map ANAHTARI içindeki
+         * {@code ${ENV}} yer tutucusu <b>çözülmez</b> — yer tutucu çözümü değerlere uygulanır,
+         * anahtar adlarına değil. {@code "[${CURRENCY_CRM_KEY}]": crm} yazımı, ortam
+         * değişkeninin adını harfi harfine anahtar olarak kaydeder ve doğru anahtarla gelen
+         * istek bile 401 alır. Arıza sessizdir: yapılandırma doğru <i>görünür</i>.
+         * Tek dizgi hem env'den güvenle gelir hem de sırrı YAML'e yazmaya gerek bırakmaz.
+         */
+        public void setKeySpec(String spec) {
+            Map<String, String> parsed = new LinkedHashMap<>();
+            if (spec != null && !spec.isBlank()) {
+                for (String entry : spec.split(",")) {
+                    String[] parts = entry.split("=", 2);
+                    String key = parts[0].trim();
+                    // Tanımsız/yer tutucu değerler sessizce elenir: .env doldurulmadığında
+                    // servis "__unset__" diye bir anahtarı geçerli saymamalıdır.
+                    if (key.isEmpty() || key.startsWith("__")) {
+                        continue;
+                    }
+                    parsed.put(key, parts.length > 1 && !parts[1].isBlank()
+                            ? parts[1].trim() : "unnamed");
+                }
+            }
+            this.keys = parsed;
+        }
+    }
+
+    /**
+     * İstek hızı sınırı — <b>doğru davranan tüketiciyi kısmak için DEĞİL</b>, yanlış davrananın
+     * yarıçapını sınırlamak için.
+     *
+     * <p>Cache'ini kullanan bir tüketici (CRM: 15 dk) saatte ~4 istek atar ve bu sınıra asla
+     * yaklaşmaz. Sınır, cache'i devre dışı kalan ya da döngüye giren bir tüketici içindir —
+     * ve varsayılan bilinçli olarak <b>cömerttir</b>: CRM'in kendi Redis'i düşerse cache
+     * fail-open olduğu için her isteği bize gelir; o an tüketiciyi büsbütün durdurmak,
+     * zaten bozulmuş bir durumu servis kesintisine çevirirdi.
+     */
+    public static class RateLimit {
+
+        private boolean enabled = true;
+
+        /** Pencere başına izin verilen istek sayısı. */
+        private int limit = 120;
+
+        /** Sabit pencere uzunluğu. */
+        private Duration window = Duration.ofMinutes(1);
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getLimit() {
+            return limit;
+        }
+
+        public void setLimit(int limit) {
+            this.limit = limit;
+        }
+
+        public Duration getWindow() {
+            return window;
+        }
+
+        public void setWindow(Duration window) {
+            this.window = window;
+        }
     }
 
     /** Cache pencereleri — ikisi FARKLI şeydir, bkz. {@code RateCache}. */
