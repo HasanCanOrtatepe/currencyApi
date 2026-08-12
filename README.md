@@ -258,6 +258,46 @@ ile `http://localhost:8096`'da ayağa kalkar.
 > ssh -L 8097:127.0.0.1:8097 -L 8096:127.0.0.1:8096 <kullanici>@<bu-makine>
 > ```
 
+## Nerede çalışıyor (ve neyin ne zaman öleceği)
+
+**Cloudflare hiçbir şey barındırmaz.** Her şey servisin kurulu olduğu makinede çalışır;
+`cloudflared` o makineden Cloudflare'e **dışarı doğru** bir tünel açar ve gelen istekler o
+hazır tünelden geri itilir. Router'da port yönlendirme gerekmemesinin sebebi budur.
+
+```
+istemci → Cloudflare kenarı → (cloudflared'in açtığı tünel) → makine:8095
+                                                               └ podman VM
+                                                                 ├ currency-api  :8095
+                                                                 ├ redis
+                                                                 ├ admin API     :8097  (yalnız loopback)
+                                                                 └ admin panel   :8096  (yalnız loopback)
+```
+
+| Ne olursa | Sonuç |
+|---|---|
+| Konteyner **çökerse** | `restart: unless-stopped` geri getirir |
+| Konteyner **elle durdurulursa** | Geri gelmez — elle durdurma kasıtlı sayılır |
+| **Redis** düşerse | Dinamik anahtarlar 401 (fail-closed); statik anahtar ve kur sunumu çalışır |
+| **cloudflared** çökerse | Dışarısı erişemez, yerel çalışır; LaunchDaemon `KeepAlive` geri getirir |
+| **Makine yeniden başlarsa** | Zincir kendiliğinden toparlanır (ölçüldü: ~18 sn) |
+| **Makine kapanırsa** | Her şey durur — hiçbir yerde kopyası yoktur |
+| İnternet keserse | Dışarısı erişemez; yerel çalışmaya devam eder |
+
+> **Makine yeniden başlayınca konteynerlerin geri gelmesi kendiliğinden OLMAZ ve bu
+> ölçülerek öğrenildi.** `restart: unless-stopped` yalnız konteyner çökerse devreye girer;
+> VM'in kendisi yeniden başladığında konteynerleri geri getiren şey `podman-restart.service`'tir
+> ve varsayılan olarak **kapalıdır**. Üstelik konteynerler **rootless** çalıştığı için servisin
+> `root` seviyesinde etkinleştirilmesi işe yaramaz (root, kullanıcının konteynerlerini görmez);
+> ayrıca **linger** açılmalıdır, yoksa kullanıcının systemd yöneticisi açılışta hiç başlamaz:
+>
+> ```bash
+> podman machine ssh 'systemctl --user enable --now podman-restart.service'
+> podman machine ssh 'sudo loginctl enable-linger core'
+> ```
+>
+> Doğrulama, iddiaya güvenmeden yapılmalıdır — VM durdurulup başlatılır ve **hiçbir şey elle
+> yapılmadan** servisin geri gelip gelmediğine bakılır.
+
 ## İşletim (`ops/`)
 
 ```bash

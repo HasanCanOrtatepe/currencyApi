@@ -105,6 +105,27 @@ istemez** (kaosu süren duman testinin elinde anahtar yoktur) ve **durum değiş
 açık bir serviste bu ikisi bir arada uzaktan erişilebilir bir arıza düğmesidir. Yalnız tüketici
 testlerinde açılır.
 
+## Çalışma zamanı — kalıcılık zinciri
+
+Cloudflare **barındırmaz**, yalnız tüneller: her şey makinede, podman VM'i içinde çalışır.
+Makine yeniden başladığında zincir şu sırayla toparlanır — her halka ayrı kurulmuştur ve
+biri eksikse servis ölü kalır:
+
+1. `com.currencyapi.podman-machine` (LaunchDaemon) → VM'i başlatır
+2. VM içinde **kullanıcı** seviyesindeki `podman-restart.service` + `loginctl enable-linger core`
+   → konteynerleri geri getirir
+3. `com.currencyapi.cloudflared` (LaunchDaemon, `KeepAlive`) → tüneli yeniden kurar
+
+**2. halka en kolay atlanandır ve sessizdir:** `restart: unless-stopped` yalnız konteyner
+ÇÖKERSE devreye girer, VM yeniden başladığında değil. Servis root seviyesinde etkinleştirilirse
+de işe yaramaz — konteynerler rootless'tır ve root onları görmez. Linger olmadan da kullanıcının
+systemd yöneticisi açılışta hiç başlamaz. Bu üçü ölçülerek öğrenildi: ilk tatbikatta VM
+yeniden başladı ve konteynerler geri GELMEDİ.
+
+Değişiklik yapıldığında doğrulama şudur (iddia yeterli değildir):
+`podman machine stop && podman machine start`, sonra **elle hiçbir şey yapmadan** servisin
+kendiliğinden dönmesini beklemek. Ölçülen toparlanma: ~18 saniye.
+
 ## Sözleşme notları
 
 - **Cevap zarfı YOKTUR** — CRM'in `ApiResponse<T>` zarfının aksine bu servis çıplak JSON döner
