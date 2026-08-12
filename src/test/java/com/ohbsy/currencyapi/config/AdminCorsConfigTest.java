@@ -39,6 +39,18 @@ class AdminCorsConfigTest {
                 .containsExactlyInAnyOrder("GET", "POST", "PATCH", "DELETE");
     }
 
+    /**
+     * Panel yalnız loopback'e bağlıdır ama tarayıcıya {@code localhost} da {@code 127.0.0.1} de
+     * yazılabilir; {@code Origin} hangisi yazıldıysa o gider. Biri eksik olsaydı panel,
+     * kullanıcının hangi yazımı seçtiğine bağlı olarak sessizce çalışmazdı.
+     */
+    @Test
+    @DisplayName("localhost ve 127.0.0.1 yazımlarının İKİSİ de kabul edilir")
+    void bothLoopbackSpellingsAreAllowed() {
+        assertThat(adminConfiguration().getAllowedOriginPatterns())
+                .containsExactlyInAnyOrder("http://localhost:8096", "http://127.0.0.1:8096");
+    }
+
     @Test
     @DisplayName("Token başlığına izin verilir — yoksa tarayıcı isteği hiç göndermez")
     void adminTokenHeaderIsAllowed() {

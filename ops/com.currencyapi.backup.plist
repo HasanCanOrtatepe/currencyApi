@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Redis yedeğini her gün 03:30'da alır.
+
+  Kurulum:
+    cp ops/com.currencyapi.backup.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.currencyapi.backup.plist
+
+  Not: Mac o saatte kapalı/uykudaysa launchd, makine uyandığında çalıştırır (kaçırılan
+  çalıştırma atlanmaz) — yedeğin "makine hep açıktı" varsayımına bağlı kalmaması için.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.currencyapi.backup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/hasancanortatepe/Projects/currencyApi/ops/backup-redis.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>3</integer>
+    <key>Minute</key><integer>30</integer>
+  </dict>
+  <key>StandardOutPath</key><string>/Users/hasancanortatepe/Library/Logs/currencyapi/backup.log</string>
+  <key>StandardErrorPath</key><string>/Users/hasancanortatepe/Library/Logs/currencyapi/backup.log</string>
+</dict>
+</plist>

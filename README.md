@@ -244,8 +244,45 @@ kesintisinde ayakta kalması gereken bir tüketiciye dinamik değil **statik** (
 anahtar verin.
 
 Bir de `admin-ui/` altında bu API'nin üstüne ince bir Angular arayüzü vardır (anahtar listesi,
-oluşturma formu, tek seferlik gösterim, iptal) — `podman compose up -d --build` ile
-`http://<bu-makine>:8096`'da ayağa kalkar, o da yalnız LAN'a açıktır.
+oluşturma formu, tek seferlik gösterim, limit düzenleme, iptal) — `podman compose up -d --build`
+ile `http://localhost:8096`'da ayağa kalkar.
+
+> **Admin yüzeyi yalnız loopback'e (`127.0.0.1`) bağlıdır.** Önce tüm arayüzlere bağlıydı ama bu
+> sabit bir ev ağı varsayımıydı: burası bir dizüstü ve güvenilmeyen bir Wi-Fi'a bağlandığı anda
+> panel o ağdaki herkese açılırdı (token LAN'da düz HTTP ile gider, makinenin güvenlik duvarı da
+> kapalı olabilir). Başka bir cihazdan yönetmek gerekirse SSH tüneli kullanılır:
+> ```bash
+> ssh -L 8097:127.0.0.1:8097 -L 8096:127.0.0.1:8096 <kullanici>@<bu-makine>
+> ```
+
+## İşletim (`ops/`)
+
+```bash
+./ops/backup-redis.sh                    # Redis yedeği al (varsayılan: son 14 kopya saklanır)
+./ops/backup-redis.sh --restore <dosya>  # geri yükle
+./ops/healthcheck.sh                     # zincirin tamamını public URL üzerinden kontrol et
+```
+
+**Yedek neden gerekli:** dağıtılmış anahtarların hash'leri ve 7 günlük "son geçerli kur" ağı
+yalnız `currency-redis` volume'unda yaşar. O volume kaybolursa **tüketicilere dağıtılmış tüm
+anahtarlar** bir anda çalışmaz olur ve geri getirilemez (ham anahtarlar tasarım gereği hiçbir
+yerde saklanmaz).
+
+**Sağlık kontrolü neden public URL'den:** konteynerin kendi healthcheck'i yalnız süreci görür.
+Tünel düşerse ya da servis ayakta olduğu hâlde kur veremez hâle gelirse konteyner "sağlıklı"
+görünmeye devam eder — oysa dışarıdaki tüketici için servis yoktur. Kontrol, tüketicinin
+gördüğü yerden yapılır ve yalnız **durum değiştiğinde** bildirir (arıza → toparlanma).
+
+İkisi de `launchd` ile zamanlanabilir (sağlık 5 dk'da bir, yedek her gece 03:30):
+
+```bash
+cp ops/com.currencyapi.healthcheck.plist ops/com.currencyapi.backup.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.currencyapi.healthcheck.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.currencyapi.backup.plist
+```
+
+Uzaktayken de haber almak için isteğe bağlı: `CURRENCY_ALERT_WEBHOOK=https://...`
+(Slack/Discord/ntfy). Verilmezse yalnız macOS bildirimi kullanılır.
 
 ## Simülatör yüzü (tüketici testleri) — **varsayılan KAPALI**
 

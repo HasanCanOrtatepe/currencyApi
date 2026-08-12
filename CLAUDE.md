@@ -80,8 +80,14 @@ bu riskten muaftır (bellek içi) — Redis kesintisinde ayakta kalması gereken
 |---|---|---|
 | Tüketici API (`/api/v1/rates`) | 8095 | İnternete açık (Cloudflare tüneli), `X-API-Key` ister |
 | Tanıtım sayfası (`/`) + önizleme (`/api/v1/rates/preview`) | 8095 | Anahtarsız, ama **kota IP başına uygulanır** |
-| Admin API (`/admin/**`) | 8097 | **LAN-only** — tünel bu portu bilmez; `X-Admin-Token` ister |
-| Admin panel (Angular) | 8096 | **LAN-only** |
+| Admin API (`/admin/**`) | 8097 | **Yalnız loopback** (`127.0.0.1`); `X-Admin-Token` ister |
+| Admin panel (Angular) | 8096 | **Yalnız loopback** (`127.0.0.1`) |
+
+Admin portları önce tüm arayüzlere bağlıydı ("LAN'dan da yönetebileyim"); bu **sabit bir ev ağı
+varsayımıydı**. Burası bir dizüstü: kafede/otelde bir Wi-Fi'a bağlandığı anda admin yüzeyi o
+ağdaki herkese açılırdı — üstelik token LAN'da düz HTTP ile gider (tünel yalnız 8095'i TLS'ler)
+ve makinenin güvenlik duvarı kapalıdır. Başka bir cihazdan yönetmek gerekirse SSH tüneli:
+`ssh -L 8097:127.0.0.1:8097 -L 8096:127.0.0.1:8096 <kullanici>@<makine>`.
 
 **Admin yüzeyi asla tünele eklenmez.** Ayrı port, path filtresinden bağımsız *yapısal* bir
 sınırdır: tünel path değil TÜM portu yönlendirir. Token kontrolü bunun üzerine ikinci

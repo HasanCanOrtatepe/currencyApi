@@ -101,9 +101,13 @@ services:
       CURRENCY_API_KEYS: ${CURRENCY_API_KEYS:-}
       CURRENCY_RATE_LIMIT: ${CURRENCY_RATE_LIMIT:-120}
     ports:
-      # Tunnel yalniz 8095'i biliyor — bu port doğası gereği internetten erişilemez, ama aynı
-      # LAN'dan erişilebilir olsun diye tüm arayüzlere bağlanır (127.0.0.1 değil).
-      - "${CURRENCY_ADMIN_PORT:-8097}:${CURRENCY_ADMIN_PORT:-8097}"
+      # YALNIZ LOOPBACK. Önce tüm arayüzlere bağlıydı ("LAN'dan da yönetebileyim") ama bu,
+      # sabit bir ev ağı varsayımıydı: burası bir DİZÜSTÜ ve kafede/otelde/okulda bir Wi-Fi'a
+      # bağlandığı anda admin yüzeyi o ağdaki herkese açılırdı — üstelik token LAN'da düz HTTP
+      # ile gider (tünel yalnız 8095'i TLS'ler) ve makinenin güvenlik duvarı kapalıdır.
+      # Başka bir cihazdan yönetmek gerekirse SSH tüneli kullanılır:
+      #   ssh -L 8097:127.0.0.1:8097 -L 8096:127.0.0.1:8096 <kullanici>@<bu-makine>
+      - "127.0.0.1:${CURRENCY_ADMIN_PORT:-8097}:${CURRENCY_ADMIN_PORT:-8097}"
     healthcheck:
       # /actuator/health anahtar İSTEMEZ (ApiGuardFilter muafiyeti) — orkestratörün elinde
       # admin token'ı yoktur. Sağlıksızlığı görmenin başka yolu olmazdı: restart yalnız süreç
@@ -117,7 +121,7 @@ services:
 
   # Angular admin paneli — currency-api-admin'in (8097) üstüne ince bir arayüz. Kendi imajı,
   # kendi yaşam döngüsü (pom.xml'in frontend/ için belirttiği bağımsızlık ilkesiyle aynı
-  # gerekçe). Tunnel bu portu da hiç bilmiyor: LAN'a açık, internete kapalı.
+  # gerekçe). Admin API ile AYNI gerekçeyle yalnız loopback'e bağlanır.
   admin-ui:
     build:
       context: ./admin-ui
@@ -126,7 +130,8 @@ services:
     depends_on:
       - currency-api-admin
     ports:
-      - "8096:80"
+      # Yalnız loopback — bkz. currency-api-admin'deki gerekçe.
+      - "127.0.0.1:8096:80"
     healthcheck:
       # nginx:alpine'de curl yok; wget BusyBox ile gelir.
       test: ["CMD", "wget", "--spider", "-q", "http://localhost/index.html"]

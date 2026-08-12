@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sağlık kontrolünü 5 dakikada bir çalıştırır.
+
+  LaunchDAEMON değil LaunchAGENT'tır ve bu bilinçlidir: bildirim (`display notification`)
+  bir kullanıcı oturumu gerektirir; sistem alanında çalışan bir daemon'ın bildirimi
+  hiçbir yerde görünmezdi.
+
+  Kurulum:
+    cp ops/com.currencyapi.healthcheck.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.currencyapi.healthcheck.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.currencyapi.healthcheck</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/hasancanortatepe/Projects/currencyApi/ops/healthcheck.sh</string>
+    <string>--quiet</string>
+  </array>
+  <key>StartInterval</key><integer>300</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/Users/hasancanortatepe/Library/Logs/currencyapi/healthcheck-agent.log</string>
+  <key>StandardErrorPath</key><string>/Users/hasancanortatepe/Library/Logs/currencyapi/healthcheck-agent.log</string>
+</dict>
+</plist>

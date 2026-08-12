@@ -102,14 +102,18 @@ class CurrencyApiPropertiesTest {
     }
 
     @Test
-    @DisplayName("admin varsayılanları: kapalı, boş token, 8097, cors deseni http://*:8096")
+    @DisplayName("admin varsayılanları: kapalı, boş token, 8097, CORS yalnız loopback")
     void adminDefaults() {
         CurrencyApiProperties properties = new CurrencyApiProperties();
 
         assertThat(properties.getAdmin().isEnabled()).isFalse();
         assertThat(properties.getAdmin().getToken()).isEmpty();
         assertThat(properties.getAdmin().getPort()).isEqualTo(8097);
-        assertThat(properties.getAdmin().getCorsOriginPattern()).isEqualTo("http://*:8096");
+        // Panel yalnız loopback'e bağlıdır; wildcard host (eski "http://*:8096") gereksiz
+        // bir gevşekliktir ve varsayılanda bulunmamalıdır.
+        assertThat(properties.getAdmin().getCorsOriginPattern())
+                .isEqualTo("http://localhost:8096,http://127.0.0.1:8096")
+                .doesNotContain("*");
     }
 
     /**

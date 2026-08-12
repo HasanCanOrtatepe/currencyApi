@@ -290,18 +290,18 @@ public class CurrencyApiProperties {
         private int port = 8097;
 
         /**
-         * Angular admin-ui'nin origin'i için bir DESEN — yalnız {@code /admin/**} için CORS'a
-         * izin verilir. Genel/public API'ye (tarayıcı istemcisi hiç olmayan) dokunulmaz.
+         * Admin panelinin izinli origin'leri (virgülle ayrılır) — yalnız {@code /admin/**} için.
+         * Genel/public API'ye (tarayıcı istemcisi hiç olmayan) dokunulmaz.
          *
-         * <p><b>Neden sabit bir origin değil, desen:</b> admin-ui aynı LAN'daki başka bir
-         * cihazdan {@code http://<mac-ip>:8096} ile açılabilir; tarayıcı isteğin {@code Origin}
-         * başlığında GERÇEKTEN bağlandığı adresi gönderir ({@code http://192.168.1.5:8096}),
-         * {@code localhost} değil. Sabit {@code http://localhost:8096} yalnız Mac'in kendi
-         * tarayıcısından erişimi karşılardı, LAN'daki diğer cihazlardan gelen isteği CORS
-         * sessizce reddederdi. {@code http://*:8096} deseni portu sabit tutar, host'u serbest
-         * bırakır.
+         * <p><b>Neden iki değer:</b> panel yalnız loopback'e bağlıdır, ama tarayıcı adres
+         * çubuğuna {@code localhost} da {@code 127.0.0.1} de yazılabilir ve {@code Origin}
+         * başlığında hangisi yazıldıysa o gider. İkisi de listede olmasaydı, kullanıcının
+         * hangi yazımı seçtiğine bağlı olarak panel sessizce çalışmazdı.
+         *
+         * <p>Önceki değer {@code http://*:8096} idi (host serbest): panel LAN'a açıkken
+         * gerekiyordu. Loopback'e çekildikten sonra o gevşeklik gereksizdir.
          */
-        private String corsOriginPattern = "http://*:8096";
+        private String corsOriginPattern = "http://localhost:8096,http://127.0.0.1:8096";
 
         public boolean isEnabled() {
             return enabled;
