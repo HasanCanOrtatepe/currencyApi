@@ -1,23 +1,45 @@
-# T34 Faz 7 — sahte kur satıcısı.
-# Config Server'dan OKUMAZ ve Eureka'ya KAYDOLMAZ: bu servis CRM'in bir parçası değil, taklit
-# ettiği dış dünyanın parçasıdır. Ayarları kendi imajındadır (config-server/discovery-server
-# emsali — onlar da config client değildir).
+# TCMB tabanlı kur servisi.
+# Config Server'dan OKUMAZ ve Eureka'ya KAYDOLMAZ: bağımsız bir mikroservistir ve ayarları
+# kendi imajındadır. Tüketicileri onu URL ile bulur.
 server:
   port: 8095
 
 spring:
   application:
     name: currency-api
+  data:
+    redis:
+      # Yalnız currency-api.cache.type=redis iken kullanılır.
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2s          # Redis alt saniyede cevap verir; 2 sn zaten cömert bir üst sınırdır
+                           # ve erişilemezlikte isteği dakikalarca bekletmez (fail-open ancak
+                           # hızlı düşerse işe yarar).
+
+currency-api:
+  cache:
+    # memory | redis — çok instance'lı kurulumda redis olmalıdır (kur paylaşılan durumdur).
+    type: ${CURRENCY_CACHE_TYPE:memory}
+    # TAZELİK penceresi: içindeyken TCMB'ye HİÇ gidilmez.
+    ttl: 15m
+    # SAKLAMA süresi: tazelik dolsa da kayıt silinmez, "son geçerli kur" olarak durur.
+    # Hafta sonu + resmî tatil zincirlerini kapsar.
+    retention: 7d
+  tcmb:
+    base-url: ${TCMB_BASE_URL:https://www.tcmb.gov.tr}
+    connect-timeout: 5s
+    read-timeout: 10s
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
   endpoint:
     health:
       probes:
         enabled: true
+      show-details: when-authorized
 
 logging:
   level:

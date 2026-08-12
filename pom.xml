@@ -32,7 +32,6 @@
     </properties>
 
     <dependencies>
-        <!-- Tek bağımlılık: web. DB yok, kur tablosu bellekte (bir test ikilisidir). -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -40,6 +39,20 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!--
+          Redis: kur ÇOK INSTANCE'LI kurulumda paylaşılan bir durumdur (bkz. RedisRateCache).
+          Bağımlılık her zaman derlenir ama bean yalnız `currency-api.cache.type=redis` iken
+          kurulur — tek instance ve yerel geliştirme Redis'siz çalışır, yoksa basit bir birim
+          testi bile altyapı gerektirirdi.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

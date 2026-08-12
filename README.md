@@ -1,73 +1,128 @@
-# currency-api — sahte kur satıcısı (T34 Faz 7)
+# currency-api
 
-TCMB ve ECB'nin günlük kur uçlarını, **gerçek satıcıların yollarını ve XML şekillerini birebir
-kullanarak** taklit eden bağımsız bir Spring Boot servisi.
+**TCMB'yi ana veri kaynağı alan kur servisi.** Merkez Bankası'nın günlük döviz kuru belgesini
+çeker, cache'ler ve kendi JSON sözleşmesiyle sunar. Bağımsız bir mikroservistir: veritabanı yok,
+Config Server'dan okumaz, servis kayıt defterine kaydolmaz.
 
-> **CRM'in parçası değildir.** `backend/` reaktörüne girmez, Config Server'dan okumaz, Eureka'ya
-> kaydolmaz, veritabanı taşımaz. Taklit ettiği şeyin yerinde durması gerekir: reaktöre girseydi
-> CRM ile birlikte derlenir, sürümlenir ve kırılırdı — yani "dış hizmet" olmaktan çıkardı.
-> `frontend/` ile aynı gerekçe.
+## Ne yapar
 
-## Neden gerçek satıcının yolunu ve şeklini taklit ediyor
+```
+GET /api/v1/rates                    → tüm desteklenen kurlar
+GET /api/v1/rates?symbols=USD,EUR    → yalnız istenenler
+```
 
-CRM tarafında `crm.currency.provider=fake` ile `real` arasındaki farkın **yalnız base URL**
-olması gerekiyordu (T34 K3). Bu servis kendine kolay bir sözleşme uydursaydı (`/rates` + JSON),
-CRM'de ikinci bir adaptör yazmak gerekirdi ve o adaptör gerçek satıcıya geçişte **hiçbir şey
-kanıtlamazdı**. Taklit edilen şey satıcının rahatlığı değil, **bizim adaptörümüzün doğruluğudur**.
+```json
+{
+  "base": "TRY",
+  "rateDate": "2026-08-11",
+  "fetchedAt": "2026-08-12T05:42:52Z",
+  "provider": "tcmb",
+  "cache": "FRESH_CACHE",
+  "stale": false,
+  "rates": [
+    { "currency": "USD", "rate": 0.0209483748, "unitPrice": 47.7364000572 }
+  ]
+}
+```
 
-Aynı sebeple iki tablonun **yönleri düzeltilmez**: TCMB "1 yabancı birim = X TL" yayınlar, ECB
-"1 EUR = X yabancı birim". Sahte servis bunları normalize etseydi CRM'deki iki dönüşüm (TCMB'de
-ters çevirme, ECB'de çapraz kur) sahte yığında hiç çalışmaz ve gerçek satıcıya geçişte ilk kez
-orada patlardı.
+**İki kur yönü de sunulur, bilinçli olarak:** `rate` = 1 TL kaç USD (çevrim yönü),
+`unitPrice` = 1 USD kaç TL (gösterim yönü). Tüketicilerin yarısı birini, yarısı diğerini bekler;
+dönüşümü her tüketicinin ayrı yapması **sessiz yön hatalarının** kaynağıdır — ters çevrilmiş bir
+kur da geçerli bir pozitif sayıdır ve hiçbir doğrulamaya takılmaz.
 
-## Uçlar
+## Üç davranış vaadi
 
-| Uç | Ne | Not |
+| | Nasıl | Kanıt |
 |---|---|---|
-| `GET /kurlar/today.xml` | TCMB günlük kur belgesi | `Unit` alanı taşır (JPY: 100) |
-| `GET /stats/eurofxref/eurofxref-daily.xml` | ECB referans kurları | taban EUR; **EUR'un kendi satırı yoktur** |
-| `POST /__mode?source=<tcmb\|ecb>&mode=<...>` | arıza enjeksiyonu | `source` verilmezse ikisi birden |
-| `POST /__settings?jitter=<bool>&delayMillis=<n>` | kur oynatma / gecikme süresi | |
-| `POST /__reset` | tüm kaynakları normale döndürür | duman testi koşum başına çağırır |
-| `GET /__mode` · `GET /actuator/health` | durum | |
+| **Her istekte TCMB'ye gidilmez** | 15 dk tazelik penceresi; içindeyken sağlayıcı hiç çağrılmaz | `cache: "FRESH_CACHE"` |
+| **TCMB düşse de kur döner** | Son geçerli kur sunulur | `cache: "STALE_CACHE"`, `stale: true` |
+| **Hafta sonu/tatilde de çalışır** | TCMB o gün belge yayınlamaz (404); son iş gününün kuru sunulur | aynı yol, `NOT_PUBLISHED` sebebiyle |
 
-Kaos uçları `__` ile başlar: gerçek TCMB/ECB'de böyle bir yüzey yoktur ve olmamalıdır — bunlar
-taklidin değil **test edilebilirliğin** parçasıdır.
+Elde hiç kur yoksa (sağlayıcı erişilemez **ve** cache boş) uç **503 + `Retry-After`** döner.
+Bayat kur ise **200**'dür: elinde kullanılabilir veri varken tüketiciyi hataya düşürmek yanlış olurdu.
 
-## Kaos modları
+## Mimari
 
-| Mod | Davranış | Ne sınar |
-|---|---|---|
-| `success` | normal cevap | mutlu yol |
-| `error` | 500 | merdivenin cache/TL basamakları |
-| `timeout` | **gerçekten bekler** (`delayMillis`, varsayılan 10 sn) | CRM'in HTTP zaman aşımı |
-| `garbage` | sözdizimi bozuk XML | tolerant reader / ayrıştırıcı sınırı |
-| `holiday` | 404 | **TCMB'nin hafta sonu/tatil davranışı** — yedeğin var oluş sebebi |
+```
+api/controllers  ─ ExchangeRateController      (HTTP sözleşmesi, DTO'ya eşleme)
+business/        ─ ExchangeRateService         (cache-aside + son geçerli kur — TEK yer)
+core/integrations
+  ExchangeRateProvider                          (SOYUTLAMA — ECB buraya eklenir)
+  tcmb/  TcmbExchangeRateProvider               (HTTP)
+         TcmbXmlReader        → dtos/           (XML → DTO)
+         TcmbRateMapper                         (DTO → domain: yön çevirme, birim, tarih)
+dataAccess/      ─ RateCache                    (Redis | bellek)
+entities/        ─ ExchangeRateSnapshot         (domain — satıcıdan bağımsız)
+simulator/       ─ sahte satıcı uçları + kaos   (tüketici testleri için, bkz. aşağıda)
+```
 
-**Modlar kaynak başınadır** ve bu servisin asıl değeri budur: sınanacak davranış "kur kaynağı
-çöktü" değil **"TCMB çöktü ama ECB ayakta"**dır. Tek bir küresel mod bunu ifade edemezdi; iki
-kaynak birlikte düşer ve zincirin devraldığı hiç görülmezdi.
+**Zincirin her adımı ayrı sınıftadır** çünkü her adım ayrı bir sebeple bozulur ve ayrı test
+edilebilmelidir: "satıcıya ulaşamadık", "belgeyi okuyamadık", "kuru çeviremedik" farklı
+arızalardır ve farklı yerlerde aranır.
 
-> `timeout` modu **gerçekten bekler** — CRM içindeki `StubExchangeRateClient`'ın aksine. Karşıtlık
-> bilinçlidir: stub'da ölçülen şey "bizim kodumuz bloke olmuyor mu", burada ölçülen şey "HTTP
-> zaman aşımımız gerçekten çalışıyor mu". Beklemeyen bir sahte servis ikincisini sınayamaz.
+### TCMB'nin üç tuzağı (mapper'da biter)
+
+1. **Kur yönü TERSTİR** — TCMB `1 USD = 47,73 TL` yayınlar, sözleşmemiz `1 TL = 0,0209 USD`.
+   Bu hata **sessizdir**: 47,73 de geçerli bir pozitif kurdur, hiçbir doğrulamaya takılmaz ve
+   tutarları ~2000 kat şişirir. Tek koruma testtir.
+2. **`Unit` 1 olmayabilir** — JPY 100 birim üzerinden yayınlanır; hesaba katılmazsa kur 100 kat yanlış.
+3. **Günlük yayın** — gün içi güncellenmez, hafta sonu/tatilde belge yoktur.
+
+### Yeni sağlayıcı eklemek (ör. ECB)
+
+`core/integrations/<satıcı>/` altında `ExchangeRateProvider` uygulaması + kendi DTO'su + kendi
+mapper'ı. Satıcının tel formatı o paketten dışarı çıkmaz; API sözleşmesi, cache ve iş katmanı
+**değişmez**.
 
 ## Çalıştırma
 
 ```bash
-# Tek başına
-mvn spring-boot:run                 # http://localhost:8095
-
-# CRM yığınıyla (profiles: [dev] — varsayılan `up -d` ile AÇILMAZ)
-cd ../backend
-podman compose -f podman-compose.yml --profile dev up -d --build currency-api
-curl -s localhost:8095/kurlar/today.xml | head
-curl -s -X POST "localhost:8095/__mode?source=tcmb&mode=holiday"
+mvn spring-boot:run                                   # http://localhost:8095
+curl "localhost:8095/api/v1/rates?symbols=USD,EUR"
 ```
 
-CRM'i bu servise bağlamak ve duman testini koşmak için: [../backend/README.md](../backend/README.md)
-"Çoklu Para Birimi Dayanıklılık Kanıtı" bölümü.
+| Ayar | Varsayılan | Not |
+|---|---|---|
+| `currency-api.cache.type` | `memory` | **Çok instance'lı kurulumda `redis`** — kur paylaşılan durumdur |
+| `currency-api.cache.ttl` | `15m` | Tazelik: içindeyken TCMB'ye gidilmez |
+| `currency-api.cache.retention` | `7d` | Saklama: tazelik dolsa da kayıt silinmez |
+| `currency-api.tcmb.base-url` | `https://www.tcmb.gov.tr` | |
+| `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | yalnız `type=redis` iken |
 
-> ⚠️ Kaos ucunu **konteynerin içinden** sürün (duman testi öyle yapar). Host'ta 8095'i tutan
-> başıboş bir süreç publish edilen portu gölgeler; kaos o kopyaya yazılır, CRM ise konteynere
-> gider ve testler **sessizce yanlış şeyi ölçer** (ölçülerek öğrenildi).
+Sıfır konfigürasyonla çalışır: hiçbir ayar verilmeden gerçek TCMB'den kur çeker.
+
+> **Neden `memory` varsayılan:** servis Redis olmadan da ayağa kalkabilmelidir, yoksa basit bir
+> birim testi bile altyapı gerektirir ve "test edilebilir" iddiası boşa çıkar. Üretimde birden
+> çok instance varsa `redis` olmalıdır: bellekte tutulursa her instance kendi kurunu çeker
+> (satıcı isteği instance sayısıyla çarpılır) ve iki instance **farklı kur** döndürebilir.
+
+## Simülatör yüzü (tüketici testleri)
+
+Servis, gerçek satıcıların uçlarını taklit eden bir yüzey de sunar — tüketicilerin **kendi**
+dayanıklılık davranışlarını sınayabilmesi için (gerçek TCMB'ye "şimdi çök" diyemezsiniz):
+
+```
+GET  /kurlar/today.xml                       TCMB şekli
+GET  /stats/eurofxref/eurofxref-daily.xml    ECB şekli
+POST /__mode?source=tcmb|ecb&mode=success|error|timeout|garbage|holiday
+POST /__settings?jitter=true&delayMillis=10000
+POST /__reset
+```
+
+Modlar **kaynak başınadır**: sınanacak asıl davranış "kur kaynağı çöktü" değil
+**"TCMB çöktü ama ECB ayakta"**dır. `holiday` (404) TCMB'nin her hafta yaşanan davranışıdır.
+Kaos uçları `__` ile başlar; gerçek satıcılarda böyle bir yüzey yoktur ve bu uçlar taklidin
+değil **test edilebilirliğin** parçasıdır.
+
+> ⚠️ Kaos ucunu konteynerde koşarken **konteynerin içinden** sürün. Host'ta 8095'i tutan başıboş
+> bir süreç publish edilen portu gölgeler; kaos o kopyaya yazılır, tüketici konteynere gider ve
+> testler **sessizce yanlış şeyi ölçer** (ölçülerek öğrenildi).
+
+## Test
+
+```bash
+mvn test        # 15 test: yön çevirme, Unit çarpanı, XXE, cache-aside, son geçerli kur, retention
+```
+
+Testler **altyapısızdır** (Redis/ağ gerekmez): saat enjekte edilir, böylece 15 dakikalık tazelik
+sınırı gerçekten beklemeden sınanır.

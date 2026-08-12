@@ -1,4 +1,4 @@
-package com.ohbsy.currencyapi;
+package com.ohbsy.currencyapi.simulator;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

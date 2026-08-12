@@ -1,4 +1,4 @@
-package com.ohbsy.currencyapi;
+package com.ohbsy.currencyapi.simulator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

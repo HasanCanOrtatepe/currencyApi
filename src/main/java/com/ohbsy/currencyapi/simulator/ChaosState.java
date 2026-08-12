@@ -1,4 +1,4 @@
-package com.ohbsy.currencyapi;
+package com.ohbsy.currencyapi.simulator;
 
 import org.springframework.stereotype.Component;
 
