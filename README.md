@@ -264,6 +264,7 @@ ile `http://localhost:8096`'da ayağa kalkar.
 ./ops/backup-redis.sh                    # Redis yedeği al (varsayılan: son 14 kopya saklanır)
 ./ops/backup-redis.sh --restore <dosya>  # geri yükle
 ./ops/healthcheck.sh                     # zincirin tamamını public URL üzerinden kontrol et
+./ops/rotate-logs.sh                     # 10 MB'ı aşan logları döndür (son 3 kopya)
 ```
 
 **Yedek neden gerekli:** dağıtılmış anahtarların hash'leri ve 7 günlük "son geçerli kur" ağı
@@ -286,6 +287,13 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.currencyapi.backup.p
 
 Uzaktayken de haber almak için isteğe bağlı: `CURRENCY_ALERT_WEBHOOK=https://...`
 (Slack/Discord/ntfy). Verilmezse yalnız macOS bildirimi kullanılır.
+
+**Log rotasyonu** ayrı bir zamanlayıcı istemez: `healthcheck.sh` zaten dakikalar arayla
+çalıştığı için rotasyonu o çağırır ve asıl iş yalnız dosya eşiği aştığında yapılır.
+`cloudflared` kendi logunu döndürmez; sınırsız büyüyen bir log sessiz bir disk doluşudur —
+hiçbir hata vermez, yalnız bir gün disk biter ve o gün her şey aynı anda bozulur. Döndürme
+dosyayı **silmez, keser**: silinseydi yazan süreç açık dosya tanıtıcısına yazmaya devam eder
+ve loglar görünmez olurdu.
 
 ## Simülatör yüzü (tüketici testleri) — **varsayılan KAPALI**
 
@@ -318,7 +326,7 @@ değil **test edilebilirliğin** parçasıdır.
 ## Test
 
 ```bash
-mvn test                                   # 96 test — backend
+mvn test                                   # 127 test — backend
 cd admin-ui && npx ng test --watch=false   # 25 test — admin paneli
 ```
 
@@ -329,5 +337,8 @@ admin token kapısı, correlation ID ve dil çözümü.
 
 İkisi de her push/PR'da GitHub Actions ile koşar (`.github/workflows/ci.yml`).
 
-> Redis destekli sınıfların birim testi **yoktur** ve bu belgelenmiş bir boşluktur
-> (testcontainers bağımlılığı eklenmedi); onlar `podman compose` ile ayakta sınanır.
+> **Redis destekli sınıflar da testlidir ve yine altyapısız.** Sınanan şey Redis'in çalışıp
+> çalışmadığı değil, bizim kararlarımızdır: anahtar düzeni, `KEYS` taraması yapılmaması,
+> TTL'in yalnız ilk artışta kurulması, `peek`'in sayaç artırmaması ve en önemlisi
+> `ApiKeyStore.findByHash`'in **fail-closed**, cache/sayaç sınıflarının **fail-open** olması.
+> Bunların hepsi `StringRedisTemplate` taklidiyle sınanır — testcontainers'a gerek kalmadan.

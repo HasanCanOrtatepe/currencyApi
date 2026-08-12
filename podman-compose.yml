@@ -134,7 +134,12 @@ services:
       - "127.0.0.1:8096:80"
     healthcheck:
       # nginx:alpine'de curl yok; wget BusyBox ile gelir.
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost/index.html"]
+      #
+      # ADRES 127.0.0.1 OLMALI, "localhost" DEĞİL: BusyBox wget localhost'u önce IPv6'ya
+      # (::1) çözer, nginx ise `listen 80` ile yalnız IPv4'e bağlanır — bağlantı reddedilir
+      # ve konteyner, dışarıdan gayet çalışırken "unhealthy" görünür. (Ölçülerek bulundu:
+      # healthcheck eklendiğinden beri 44 ardışık başarısızlık.)
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/index.html"]
       interval: 15s
       timeout: 5s
       retries: 5

@@ -27,6 +27,11 @@ QUIET=0
 
 mkdir -p "${LOG_FILE:h}" "${STATE_FILE:h}"
 
+# Log döndürme buraya bağlıdır çünkü bu betik ZATEN dakikalar arayla çalışıyor: ayrı bir
+# LaunchAgent kurmak, kullanıcıdan ek bir kurulum adımı istemek demekti. Maliyeti birkaç
+# `stat` çağrısıdır; asıl iş yalnız dosya eşiği aştığında yapılır.
+"${0:A:h}/rotate-logs.sh" >> "$LOG_FILE" 2>&1 || true
+
 log() {
   print -r -- "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"
   (( QUIET )) || print -r -- "$*"

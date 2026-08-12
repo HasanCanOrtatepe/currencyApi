@@ -21,7 +21,7 @@ Kullanıcıya görünen ürün adı **Pair 3 Kur Servisi**'dir (tanıtım sayfas
 ## Komutlar
 
 ```bash
-mvn test                       # 95 birim testi — ALTYAPISIZ (Redis/ağ gerekmez)
+mvn test                       # 127 birim testi — ALTYAPISIZ (Redis/ağ gerekmez)
 mvn spring-boot:run            # http://localhost:8095
 podman compose up -d --build   # tam yığın: redis + api + admin api + admin panel
 
@@ -61,9 +61,9 @@ admin-ui/            Angular admin paneli — bağımsız npm projesi, Maven'a d
 - **Anahtarlar log'a, metriğe, hata gövdesine GİRMEZ** — yanlış anahtar bile bir sırdır
   (çoğu zaman BAŞKA bir ortamın geçerli anahtarıdır). Kimlik olarak `consumerName` kullanılır.
 - **Testler altyapısızdır.** Saat enjekte edilir (`Clock`), Spring context kurulmaz,
-  bileşenler `new` ile bağlanır. Redis destekli sınıfların birim testi YOKTUR ve bu
-  belgelenmiş bir boşluktur (testcontainers bağımlılığı yok); onlar `podman compose` ile
-  sınanır.
+  bileşenler `new` ile bağlanır. **Redis destekli sınıflar da bu kurala uyar:**
+  `StringRedisTemplate` taklit edilir, çünkü sınanan şey Redis değil bizim kararlarımızdır
+  (anahtar düzeni, KEYS taraması yapılmaması, fail-closed/fail-open ayrımı).
 
 ### Fail-open / fail-closed — ikisi de bilinçli
 
