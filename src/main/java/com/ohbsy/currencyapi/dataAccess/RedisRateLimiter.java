@@ -42,10 +42,11 @@ public class RedisRateLimiter implements RateLimiter {
     }
 
     @Override
-    public Decision tryConsume(String identity) {
+    public Decision tryConsume(String identity, Integer limitOverride) {
         CurrencyApiProperties.RateLimit config = properties.getRateLimit();
+        int limit = effectiveLimit(config, limitOverride);
         if (!config.isEnabled()) {
-            return Decision.unlimited(config.getLimit());
+            return Decision.unlimited(limit);
         }
 
         Duration window = config.getWindow();
@@ -55,25 +56,54 @@ public class RedisRateLimiter implements RateLimiter {
         try {
             Long count = redisTemplate.opsForValue().increment(key);
             if (count == null) {
-                return Decision.unlimited(config.getLimit());
+                return Decision.unlimited(limit);
             }
             if (count == 1L) {
                 // TTL yalnız ilk artışta kurulur; pencere böylece kaymaz.
                 redisTemplate.expire(key, window);
             }
-            int remaining = (int) Math.max(0, config.getLimit() - count);
-            boolean allowed = count <= config.getLimit();
+            int remaining = (int) Math.max(0, limit - count);
+            boolean allowed = count <= limit;
             if (!allowed) {
                 log.warn("hiz siniri asildi identity={} pencere={} limit={}",
-                        identity, window, config.getLimit());
+                        identity, window, limit);
             }
-            return new Decision(allowed, config.getLimit(), remaining, retryAfter(window));
+            return new Decision(allowed, limit, remaining, retryAfter(window));
         } catch (Exception e) {
             // FAIL-OPEN: sayacın kesintisi servisi durdurmaz.
             log.warn("hiz sinirlayici sayaci okunamadi, istek GECIRILIYOR identity={} sebep={}",
                     identity, e.toString());
-            return Decision.unlimited(config.getLimit());
+            return Decision.unlimited(limit);
         }
+    }
+
+    @Override
+    public Decision peek(String identity, Integer limitOverride) {
+        CurrencyApiProperties.RateLimit config = properties.getRateLimit();
+        int limit = effectiveLimit(config, limitOverride);
+        if (!config.isEnabled()) {
+            return Decision.unlimited(limit);
+        }
+
+        Duration window = config.getWindow();
+        long windowIndex = clock.millis() / window.toMillis();
+        String key = KEY_PREFIX + identity + ":" + windowIndex;
+
+        try {
+            // GET, INCR degil — peek bir key/EXPIRE asla yaratmamali.
+            String raw = redisTemplate.opsForValue().get(key);
+            long count = raw == null ? 0 : Long.parseLong(raw);
+            int remaining = (int) Math.max(0, limit - count);
+            return new Decision(count <= limit, limit, remaining, retryAfter(window));
+        } catch (Exception e) {
+            log.warn("hiz sinirlayici sayaci okunamadi (peek) identity={} sebep={}",
+                    identity, e.toString());
+            return Decision.unlimited(limit);
+        }
+    }
+
+    private int effectiveLimit(CurrencyApiProperties.RateLimit config, Integer limitOverride) {
+        return limitOverride != null ? limitOverride : config.getLimit();
     }
 
     /** Pencerenin bitimine kalan saniye (en az 1). */

@@ -71,5 +71,54 @@ services:
     # tek bir el müdahalesine bağlı olmaması gerekir.
     restart: unless-stopped
 
+  # AYRI bir container, AYNI imaj — admin API'sini (/admin/keys) yalnız burada açar.
+  #
+  # Neden ayrı container: currency-api yukarıda genellikle bir tünelle (ör. Cloudflare quick
+  # tunnel) internete açılır ve tünel TÜM portu yönlendirir, path bazlı bir filtre yeterli
+  # olmaz. Admin uçlarını AYRI bir portta, ayrı bir container'da çalıştırmak — tünelin hiç
+  # bilmediği bir port olduğu için — admin yüzeyini yapısal olarak internetten erişilemez
+  # kılar. İkisi de aynı Redis'i paylaşır, dolayısıyla burada oluşturulan bir anahtar public
+  # instance'ta anında geçerlidir.
+  currency-api-admin:
+    build:
+      context: .
+      dockerfile: Containerfile
+    mem_limit: 384m
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xms64m -Xmx256m -XX:+ExitOnOutOfMemoryError"
+      SERVER_PORT: ${CURRENCY_ADMIN_PORT:-8097}
+      CURRENCY_CACHE_TYPE: redis
+      REDIS_HOST: redis
+      CURRENCY_ADMIN_ENABLED: "true"
+      # Bos birakilirsa currency-api-admin ACILISTA duser (admin.enabled=true + bos token).
+      CURRENCY_ADMIN_TOKEN: ${CURRENCY_ADMIN_TOKEN:-}
+      CURRENCY_ADMIN_PORT: ${CURRENCY_ADMIN_PORT:-8097}
+      CURRENCY_ADMIN_CORS_ORIGIN_PATTERN: ${CURRENCY_ADMIN_CORS_ORIGIN_PATTERN:-http://*:8096}
+      CURRENCY_AUTH_ENABLED: ${CURRENCY_AUTH_ENABLED:-true}
+      CURRENCY_API_KEYS: ${CURRENCY_API_KEYS:-}
+      CURRENCY_RATE_LIMIT: ${CURRENCY_RATE_LIMIT:-120}
+    ports:
+      # Tunnel yalniz 8095'i biliyor — bu port doğası gereği internetten erişilemez, ama aynı
+      # LAN'dan erişilebilir olsun diye tüm arayüzlere bağlanır (127.0.0.1 değil).
+      - "${CURRENCY_ADMIN_PORT:-8097}:${CURRENCY_ADMIN_PORT:-8097}"
+    restart: unless-stopped
+
+  # Angular admin paneli — currency-api-admin'in (8097) üstüne ince bir arayüz. Kendi imajı,
+  # kendi yaşam döngüsü (pom.xml'in frontend/ için belirttiği bağımsızlık ilkesiyle aynı
+  # gerekçe). Tunnel bu portu da hiç bilmiyor: LAN'a açık, internete kapalı.
+  admin-ui:
+    build:
+      context: ./admin-ui
+      dockerfile: Containerfile
+    mem_limit: 64m
+    depends_on:
+      - currency-api-admin
+    ports:
+      - "8096:80"
+    restart: unless-stopped
+
 volumes:
   currency-redis:

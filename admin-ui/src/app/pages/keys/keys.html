@@ -1,0 +1,111 @@
+<div class="page">
+  <header>
+    <h1>API Anahtarları</h1>
+    <div class="actions">
+      <button class="secondary" (click)="showCreateForm = !showCreateForm">
+        + Yeni anahtar
+      </button>
+      <button class="ghost" (click)="logout()">Çıkış</button>
+    </div>
+  </header>
+
+  @if (error()) {
+    <p class="banner error">{{ error() }}</p>
+  }
+
+  @if (showCreateForm) {
+    <form class="create-form" (ngSubmit)="submitCreate()">
+      <div class="field">
+        <label for="consumerName">Tüketici adı</label>
+        <input id="consumerName" name="consumerName" [(ngModel)]="newConsumerName" required />
+      </div>
+      <div class="field">
+        <label for="rateLimitOverride">Özel limit (istek/dk, boş = varsayılan)</label>
+        <input
+          id="rateLimitOverride"
+          name="rateLimitOverride"
+          type="number"
+          min="1"
+          [(ngModel)]="newRateLimitOverride"
+        />
+      </div>
+      <button type="submit" [disabled]="creating()">
+        {{ creating() ? 'Oluşturuluyor…' : 'Oluştur' }}
+      </button>
+    </form>
+  }
+
+  <table>
+    <thead>
+      <tr>
+        <th>Tüketici</th>
+        <th>Anahtar</th>
+        <th>Durum</th>
+        <th>Limit</th>
+        <th>Kalan</th>
+        <th>Oluşturuldu</th>
+        <th>Son kullanım</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (row of rows(); track row.id) {
+        <tr [class.revoked]="!row.active">
+          <td>{{ row.consumerName }}</td>
+          <td><code>{{ row.keyPreview }}</code></td>
+          <td>
+            <span class="badge" [class.active]="row.active" [class.inactive]="!row.active">
+              {{ row.active ? 'aktif' : 'iptal' }}
+            </span>
+          </td>
+          <td>{{ row.usageLimit }}</td>
+          <td>{{ row.usageRemaining }}</td>
+          <td>{{ row.createdAt | date: 'short' }}</td>
+          <td>{{ row.lastUsedAt ? (row.lastUsedAt | date: 'short') : '—' }}</td>
+          <td>
+            @if (row.active) {
+              <button class="ghost danger" (click)="askRevoke(row)">İptal et</button>
+            }
+          </td>
+        </tr>
+      } @empty {
+        <tr>
+          <td colspan="8" class="empty">
+            {{ loading() ? 'Yükleniyor…' : 'Henüz anahtar yok.' }}
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>
+
+@if (justCreated(); as created) {
+  <div class="modal-backdrop">
+    <div class="modal">
+      <h2>Anahtar oluşturuldu</h2>
+      <p class="warn">Bu anahtar yalnız ŞİMDİ gösteriliyor — kapattıktan sonra bir daha görüntülenemez.</p>
+      <div class="raw-key">
+        <code>{{ created.rawKey }}</code>
+        <button class="secondary" (click)="copyRawKey()">Kopyala</button>
+      </div>
+      <button (click)="closeReveal()">Anladım, kapat</button>
+    </div>
+  </div>
+}
+
+@if (revokeCandidate; as candidate) {
+  <div class="modal-backdrop">
+    <div class="modal">
+      <h2>Anahtarı iptal et</h2>
+      <p>
+        <strong>{{ candidate.consumerName }}</strong> ({{ candidate.keyPreview }}) tüketicisine
+        ait anahtarı iptal etmek üzeresiniz. Bu anahtarla yapılan istekler hemen sonra
+        reddedilir.
+      </p>
+      <div class="modal-actions">
+        <button class="ghost" (click)="cancelRevoke()">Vazgeç</button>
+        <button class="danger" (click)="confirmRevoke()">İptal et</button>
+      </div>
+    </div>
+  </div>
+}

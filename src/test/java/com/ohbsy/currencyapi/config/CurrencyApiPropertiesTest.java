@@ -87,4 +87,27 @@ class CurrencyApiPropertiesTest {
 
         assertThat(properties.getTcmb().getBaseUrl()).isEqualTo("https://www.tcmb.gov.tr");
     }
+
+    @Test
+    @DisplayName("admin.enabled/token/port ortamdan bağlanır")
+    void adminBindsFromEnvironment() {
+        CurrencyApiProperties properties = bind(Map.of(
+                "currency-api.admin.enabled", "true",
+                "currency-api.admin.token", "cok-gizli-token",
+                "currency-api.admin.port", "9001"));
+
+        assertThat(properties.getAdmin().isEnabled()).isTrue();
+        assertThat(properties.getAdmin().getToken()).isEqualTo("cok-gizli-token");
+        assertThat(properties.getAdmin().getPort()).isEqualTo(9001);
+    }
+
+    @Test
+    @DisplayName("admin varsayılanları: kapalı, boş token, 8097")
+    void adminDefaults() {
+        CurrencyApiProperties properties = new CurrencyApiProperties();
+
+        assertThat(properties.getAdmin().isEnabled()).isFalse();
+        assertThat(properties.getAdmin().getToken()).isEmpty();
+        assertThat(properties.getAdmin().getPort()).isEqualTo(8097);
+    }
 }

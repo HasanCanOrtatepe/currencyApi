@@ -1,0 +1,24 @@
+<div class="login-page">
+  <form class="login-card" (ngSubmit)="submit()">
+    <h1>currency-api admin</h1>
+    <p class="hint">Anahtar yönetimi için admin token'ınızı girin.</p>
+
+    <label for="token">Admin Token</label>
+    <input
+      id="token"
+      type="password"
+      name="token"
+      [(ngModel)]="token"
+      autocomplete="off"
+      placeholder="X-Admin-Token"
+    />
+
+    @if (error()) {
+      <p class="error">{{ error() }}</p>
+    }
+
+    <button type="submit" [disabled]="checking()">
+      {{ checking() ? 'Kontrol ediliyor…' : 'Giriş yap' }}
+    </button>
+  </form>
+</div>

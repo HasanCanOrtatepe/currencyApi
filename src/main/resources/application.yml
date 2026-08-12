@@ -46,6 +46,19 @@ currency-api:
     # Sınır, cache'i devre dışı kalan ya da döngüye giren tüketici içindir.
     limit: ${CURRENCY_RATE_LIMIT:120}
     window: 1m
+  admin:
+    # Varsayılan KAPALI — Auth.enabled ile aynı gerekçe, artı: bu servisin CANLI bir kurulumu
+    # varsa, özelliğin eklendiği bir imaj güncellemesi .env güncellenmeden o kurulumu kırmasın.
+    enabled: ${CURRENCY_ADMIN_ENABLED:false}
+    # /admin/** BU token'i ister (X-Admin-Token). Depoya YAZILMAZ, yalnız ortam değişkeninden.
+    token: ${CURRENCY_ADMIN_TOKEN:}
+    # /admin/** YALNIZ bu portta sunulur, server.port'ta (8095) DEĞİL — Cloudflare tunnel
+    # yalnız 8095'i ileriye taşır; admin uçlarının aynı portta durması, path filtreden
+    # bağımsız olarak onları internete açardı (tunnel path değil TÜM portu yönlendirir).
+    port: ${CURRENCY_ADMIN_PORT:8097}
+    # Angular admin-ui'nin origin DESENİ — yalnız /admin/** için CORS izni. Host serbest
+    # (LAN'daki herhangi bir cihazdan erişilebilsin), yalnız admin-ui'nin portu (8096) sabit.
+    cors-origin-pattern: ${CURRENCY_ADMIN_CORS_ORIGIN_PATTERN:http://*:8096}
 
 management:
   endpoints:

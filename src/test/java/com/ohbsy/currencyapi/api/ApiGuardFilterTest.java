@@ -1,8 +1,12 @@
 package com.ohbsy.currencyapi.api;
 
 import com.ohbsy.currencyapi.config.CurrencyApiProperties;
+import com.ohbsy.currencyapi.core.utilities.ApiKeyHasher;
+import com.ohbsy.currencyapi.dataAccess.ApiKeyStore;
+import com.ohbsy.currencyapi.dataAccess.InMemoryApiKeyStore;
 import com.ohbsy.currencyapi.dataAccess.InMemoryRateLimiter;
 import com.ohbsy.currencyapi.dataAccess.RateLimiter;
+import com.ohbsy.currencyapi.entities.ApiKeyRecord;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -36,6 +40,7 @@ class ApiGuardFilterTest {
             Clock.fixed(Instant.parse("2026-08-12T10:00:00Z"), ZoneOffset.UTC);
 
     private CurrencyApiProperties properties;
+    private ApiKeyStore apiKeyStore;
     private ApiClientResolver clients;
     private ApiGuardFilter filter;
 
@@ -44,7 +49,8 @@ class ApiGuardFilterTest {
         properties = new CurrencyApiProperties();
         properties.getAuth().setEnabled(true);
         properties.getAuth().setKeySpec("gizli-anahtar=crm");
-        clients = new ApiClientResolver(properties);
+        apiKeyStore = new InMemoryApiKeyStore();
+        clients = new ApiClientResolver(properties, apiKeyStore, FIXED);
         RateLimiter limiter = new InMemoryRateLimiter(properties, FIXED);
         filter = new ApiGuardFilter(clients, limiter);
     }
@@ -151,8 +157,44 @@ class ApiGuardFilterTest {
         CurrencyApiProperties broken = new CurrencyApiProperties();
         broken.getAuth().setEnabled(true);
 
-        assertThatThrownBy(() -> new ApiClientResolver(broken).validateConfiguration())
+        assertThatThrownBy(() -> new ApiClientResolver(broken, new InMemoryApiKeyStore(), FIXED)
+                .validateConfiguration())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("hic anahtar tanimli degil");
+    }
+
+    @Test
+    @DisplayName("Dinamik anahtarın özel limiti globali ezer")
+    void dynamicKeyHonorsRateLimitOverride() throws Exception {
+        String rawKey = ApiKeyHasher.generateRawKey();
+        apiKeyStore.save(new ApiKeyRecord("id-1", "reporting",
+                ApiKeyHasher.sha256Hex(rawKey), ApiKeyHasher.preview(rawKey),
+                FIXED.instant(), null, 2, null));
+
+        for (int i = 0; i < 2; i++) {
+            MockHttpServletResponse ok = new MockHttpServletResponse();
+            filter.doFilter(request(rawKey), ok, new MockFilterChain());
+            assertThat(ok.getStatus()).isEqualTo(200);
+        }
+
+        MockHttpServletResponse blocked = new MockHttpServletResponse();
+        filter.doFilter(request(rawKey), blocked, new MockFilterChain());
+
+        assertThat(blocked.getStatus()).isEqualTo(429);
+        assertThat(blocked.getHeader("X-RateLimit-Limit")).isEqualTo("2");
+    }
+
+    @Test
+    @DisplayName("İptal edilmiş dinamik anahtar → 401 (bilinmeyen anahtarla aynı davranış)")
+    void revokedDynamicKeyRejected() throws Exception {
+        String rawKey = ApiKeyHasher.generateRawKey();
+        apiKeyStore.save(new ApiKeyRecord("id-2", "reporting",
+                ApiKeyHasher.sha256Hex(rawKey), ApiKeyHasher.preview(rawKey),
+                FIXED.instant(), FIXED.instant(), null, null));
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(request(rawKey), response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
     }
 }

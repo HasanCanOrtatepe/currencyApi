@@ -172,6 +172,41 @@ durdurmaz.
 > dizgiden (`CURRENCY_API_KEYS`) ayrıştırılır ve bağlama `CurrencyApiPropertiesTest` ile
 > kilitlidir.
 
+## Admin API — dinamik anahtar yönetimi (`/admin/keys`)
+
+`CURRENCY_API_KEYS` yalnız açılışta okunan **statik** anahtarlar içindir; yeni bir tüketiciye
+anahtar vermek ya da birini iptal etmek için servisi yeniden başlatmak istemiyorsanız admin
+API'sini kullanın: runtime'da anahtar oluşturur/listeler/iptal eder, hiçbir restart gerekmez.
+
+```
+POST   /admin/keys       {"consumerName": "reporting", "rateLimitOverride": 30}
+GET    /admin/keys                                    → aktif+iptal tüm anahtarlar, anlık kullanımla
+DELETE /admin/keys/{id}                                → iptal
+```
+
+**Varsayılan KAPALI ve AYRI bir portta çalışır** (`CURRENCY_ADMIN_PORT`, varsayılan `8097`) —
+`server.port` (8095) **DEĞİL**. Bu bilinçlidir: servis genellikle bir tünelle (ör. Cloudflare
+quick tunnel) internete açılır ve tünel yalnız tek bir portu bilir/yönlendirir; admin uçlarını
+aynı portta path filtresiyle "gizlemek" yetmezdi, tünel yine de o porta gelen HER isteği taşır.
+Ayrı port, admin yüzeyini tünelin doğası gereği hiç görmediği, dolayısıyla internetten **yapısal
+olarak erişilemez** bir yüzey yapar; LAN'dan yine erişilebilir. `X-Admin-Token` kontrolü
+(`CURRENCY_ADMIN_TOKEN`) bunun üzerine ikinci bir katmandır, tek başına sınır değildir.
+
+```bash
+openssl rand -hex 32   # cikan degeri CURRENCY_ADMIN_TOKEN olarak .env'e yazin
+curl -X POST localhost:8097/admin/keys -H "X-Admin-Token: <token>" -d '{"consumerName":"reporting"}'
+```
+
+**Dinamik anahtarlar Redis'te tutulur ve Redis kesintisinde FAIL-CLOSED'dır** (401) — servisin
+geri kalanının fail-open felsefesinden bilinçli bir sapma: burada Redis doğrulamanın kaynağıdır,
+hızlandırıcısı değil, fail-open burada "doğrulayamıyorsam geçir" anlamına gelirdi. Redis
+kesintisinde ayakta kalması gereken bir tüketiciye dinamik değil **statik** (`CURRENCY_API_KEYS`)
+anahtar verin.
+
+Bir de `admin-ui/` altında bu API'nin üstüne ince bir Angular arayüzü vardır (anahtar listesi,
+oluşturma formu, tek seferlik gösterim, iptal) — `podman compose up -d --build` ile
+`http://<bu-makine>:8096`'da ayağa kalkar, o da yalnız LAN'a açıktır.
+
 ## Simülatör yüzü (tüketici testleri)
 
 Servis, gerçek satıcıların uçlarını taklit eden bir yüzey de sunar — tüketicilerin **kendi**

@@ -36,10 +36,11 @@ public class InMemoryRateLimiter implements RateLimiter {
     }
 
     @Override
-    public Decision tryConsume(String identity) {
+    public Decision tryConsume(String identity, Integer limitOverride) {
         CurrencyApiProperties.RateLimit config = properties.getRateLimit();
+        int limit = effectiveLimit(config, limitOverride);
         if (!config.isEnabled()) {
-            return Decision.unlimited(config.getLimit());
+            return Decision.unlimited(limit);
         }
 
         Duration window = config.getWindow();
@@ -51,9 +52,31 @@ public class InMemoryRateLimiter implements RateLimiter {
         counters.keySet().removeIf(existing -> !existing.endsWith(":" + windowIndex));
 
         long count = counters.computeIfAbsent(key, k -> new AtomicLong()).incrementAndGet();
-        int remaining = (int) Math.max(0, config.getLimit() - count);
-        return new Decision(count <= config.getLimit(), config.getLimit(), remaining,
-                retryAfter(window));
+        int remaining = (int) Math.max(0, limit - count);
+        return new Decision(count <= limit, limit, remaining, retryAfter(window));
+    }
+
+    @Override
+    public Decision peek(String identity, Integer limitOverride) {
+        CurrencyApiProperties.RateLimit config = properties.getRateLimit();
+        int limit = effectiveLimit(config, limitOverride);
+        if (!config.isEnabled()) {
+            return Decision.unlimited(limit);
+        }
+
+        Duration window = config.getWindow();
+        long windowIndex = clock.millis() / window.toMillis();
+        String key = identity + ":" + windowIndex;
+
+        // Mutasyon YOK: yalnız okur, computeIfAbsent/incrementAndGet çağrılmaz.
+        AtomicLong counter = counters.get(key);
+        long count = counter == null ? 0 : counter.get();
+        int remaining = (int) Math.max(0, limit - count);
+        return new Decision(count <= limit, limit, remaining, retryAfter(window));
+    }
+
+    private int effectiveLimit(CurrencyApiProperties.RateLimit config, Integer limitOverride) {
+        return limitOverride != null ? limitOverride : config.getLimit();
     }
 
     private long retryAfter(Duration window) {

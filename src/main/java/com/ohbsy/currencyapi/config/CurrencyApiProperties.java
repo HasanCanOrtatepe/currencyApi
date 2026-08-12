@@ -22,6 +22,7 @@ public class CurrencyApiProperties {
     private final Tcmb tcmb = new Tcmb();
     private final Auth auth = new Auth();
     private final RateLimit rateLimit = new RateLimit();
+    private final Admin admin = new Admin();
 
     public Cache getCache() {
         return cache;
@@ -37,6 +38,10 @@ public class CurrencyApiProperties {
 
     public RateLimit getRateLimit() {
         return rateLimit;
+    }
+
+    public Admin getAdmin() {
+        return admin;
     }
 
     /**
@@ -229,6 +234,78 @@ public class CurrencyApiProperties {
 
         public void setReadTimeout(Duration readTimeout) {
             this.readTimeout = readTimeout;
+        }
+    }
+
+    /**
+     * Anahtar yönetimi admin API'si ({@code /admin/keys}).
+     *
+     * <p><b>Varsayılan KAPALI — {@code Auth.enabled} ile aynı gerekçe, artı bir tane daha:</b>
+     * açık gelseydi token tanımlamamış her kurulum açılışta düşerdi — ve bu servisin zaten
+     * CANLI çalışan bir kurulumu varsa, bu özelliğin eklendiği bir imaj güncellemesi o
+     * kurulumu {@code .env} güncellenmeden kırardı. Kapalı varsayılan, yükseltmeyi
+     * etkisiz/kesintisiz kılar; özellik yalnız bilinçli olarak açıldığında devreye girer.
+     *
+     * <p><b>Admin uçları {@code server.port} DIŞINDA ayrı bir portta sunulur</b> (bkz. {@link
+     * #getPort()}) — bu servisin herkese açık tünellenmesi (ör. Cloudflare quick tunnel)
+     * TÜM portu yönlendirir, path bazlı bir filtre yeterli olmazdı. Ayrı port, admin
+     * yüzeyinin internetten yapısal olarak erişilemez olmasını sağlar; token kontrolü
+     * ({@code AdminAuthFilter}) bunun üzerine ikinci bir savunma katmanıdır, tek başına
+     * sınır değildir.
+     */
+    public static class Admin {
+
+        private boolean enabled = false;
+
+        /** {@code X-Admin-Token} ile karşılaştırılır. Depoya YAZILMAZ, yalnız ortam değişkeninden. */
+        private String token = "";
+
+        private int port = 8097;
+
+        /**
+         * Angular admin-ui'nin origin'i için bir DESEN — yalnız {@code /admin/**} için CORS'a
+         * izin verilir. Genel/public API'ye (tarayıcı istemcisi hiç olmayan) dokunulmaz.
+         *
+         * <p><b>Neden sabit bir origin değil, desen:</b> admin-ui aynı LAN'daki başka bir
+         * cihazdan {@code http://<mac-ip>:8096} ile açılabilir; tarayıcı isteğin {@code Origin}
+         * başlığında GERÇEKTEN bağlandığı adresi gönderir ({@code http://192.168.1.5:8096}),
+         * {@code localhost} değil. Sabit {@code http://localhost:8096} yalnız Mac'in kendi
+         * tarayıcısından erişimi karşılardı, LAN'daki diğer cihazlardan gelen isteği CORS
+         * sessizce reddederdi. {@code http://*:8096} deseni portu sabit tutar, host'u serbest
+         * bırakır.
+         */
+        private String corsOriginPattern = "http://*:8096";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getToken() {
+            return token;
+        }
+
+        public void setToken(String token) {
+            this.token = token;
+        }
+
+        public int getPort() {
+            return port;
+        }
+
+        public void setPort(int port) {
+            this.port = port;
+        }
+
+        public String getCorsOriginPattern() {
+            return corsOriginPattern;
+        }
+
+        public void setCorsOriginPattern(String corsOriginPattern) {
+            this.corsOriginPattern = corsOriginPattern;
         }
     }
 }

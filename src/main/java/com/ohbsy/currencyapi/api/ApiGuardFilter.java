@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Optional;
 
 /**
  * Ticari kur API'lerinin iki kapısı: <b>anahtar</b> ve <b>hız sınırı</b>.
@@ -49,25 +50,39 @@ public class ApiGuardFilter extends OncePerRequestFilter {
         this.rateLimiter = rateLimiter;
     }
 
-    /** Sağlık/metrik uçları ile simülatörün kaos uçları kapıların dışındadır. */
+    /**
+     * Sağlık/metrik uçları, simülatörün kaos uçları ve admin yüzeyi kapıların dışındadır.
+     * Admin trafiği kendi filtre zincirine ({@code AdminAuthFilter}) sahiptir ve bir "tüketici"
+     * değildir — hız sınırına tabi tutulması ya da consumer anahtarı istenmesi anlamsızdır.
+     */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.startsWith("/actuator") || path.startsWith("/__");
+        return path.startsWith("/actuator") || path.startsWith("/__") || path.startsWith("/admin");
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
 
-        if (clients.isAuthEnabled() && clients.resolve(request).isEmpty()) {
+        // TEK cozumleme: dinamik bir anahtar icin Redis'e (kimlik + lastUsedAt yazimi icin)
+        // yalnizca BIR kez gidilir, asagida hem kimlik hem override ayni sonuctan turetilir.
+        Optional<ApiClientResolver.ResolvedClient> resolved = clients.resolveClient(request);
+
+        if (clients.isAuthEnabled() && resolved.isEmpty()) {
             log.warn("gecersiz ya da eksik API anahtari path={} remote={}",
                     request.getRequestURI(), request.getRemoteAddr());
             write(response, HttpStatus.UNAUTHORIZED, "invalid or missing API key");
             return;
         }
 
-        RateLimiter.Decision decision = rateLimiter.tryConsume(clients.rateLimitIdentity(request));
+        String identity = resolved.map(ApiClientResolver.ResolvedClient::consumerName)
+                .orElseGet(() -> "ip:" + request.getRemoteAddr());
+        Integer rateLimitOverride = resolved
+                .map(ApiClientResolver.ResolvedClient::rateLimitOverride)
+                .orElse(null);
+
+        RateLimiter.Decision decision = rateLimiter.tryConsume(identity, rateLimitOverride);
         response.setHeader(LIMIT_HEADER, String.valueOf(decision.limit()));
         response.setHeader(REMAINING_HEADER, String.valueOf(decision.remaining()));
 

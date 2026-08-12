@@ -1,0 +1,96 @@
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f4f5f7;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.login-card {
+  width: 320px;
+  padding: 2rem;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 8px 24px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+h1 {
+  font-size: 1.1rem;
+  margin: 0;
+  color: #111827;
+}
+
+.hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+input {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+
+input:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+button {
+  margin-top: 0.5rem;
+  padding: 0.65rem;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+.error {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 0.85rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .login-page {
+    background: #0f1115;
+  }
+  .login-card {
+    background: #1a1d24;
+    box-shadow: none;
+    border: 1px solid #2a2e37;
+  }
+  h1 {
+    color: #f3f4f6;
+  }
+  .hint {
+    color: #9ca3af;
+  }
+  label {
+    color: #d1d5db;
+  }
+  input {
+    background: #11141a;
+    border-color: #2a2e37;
+    color: #f3f4f6;
+  }
+}

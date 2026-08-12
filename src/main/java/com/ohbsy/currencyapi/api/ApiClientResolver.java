@@ -1,12 +1,16 @@
 package com.ohbsy.currencyapi.api;
 
 import com.ohbsy.currencyapi.config.CurrencyApiProperties;
+import com.ohbsy.currencyapi.core.utilities.ApiKeyHasher;
+import com.ohbsy.currencyapi.dataAccess.ApiKeyStore;
+import com.ohbsy.currencyapi.entities.ApiKeyRecord;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.util.Optional;
 
 /**
@@ -16,6 +20,18 @@ import java.util.Optional;
  * Anahtarın kendisi log'a, metriğe ve hata mesajına <b>girmez</b>. "Hangi tüketici kotayı
  * doldurdu" sorusu bir ada (`crm`, `reporting`) bakarak cevaplanabilmelidir; anahtara bakarak
  * cevaplanan bir sistem, o soruyu her soruşta sırrı bir yere daha yazar.
+ *
+ * <h2>Statik + dinamik, bu sırayla</h2>
+ * Önce {@code CurrencyApiProperties.Auth.keys} (bellek içi, açılışta donmuş, Redis'ten
+ * bağımsız) kontrol edilir; yalnız orada bulunamazsa {@link ApiKeyStore} (admin tarafından
+ * runtime'da oluşturulmuş anahtarlar) sorgulanır. Bu sıra bilinçlidir: statik anahtarla gelen
+ * bir tüketici, dinamik depoyu tutan Redis çökse bile çalışmaya devam eder.
+ *
+ * <h2>Tek çözümleme, tek Redis çağrısı</h2>
+ * {@link #resolveClient} bir istek için TÜM bilgiyi (kimlik + varsa özel hız limiti) tek
+ * seferde döner. Çağıran ({@link ApiGuardFilter}) bunu bir kez çağırıp sonucu tekrar kullanır —
+ * ayrı ayrı {@code resolve()}/{@code rateLimitOverride()} çağırmak dinamik bir anahtar için
+ * her seferinde ayrı bir Redis okuması VE {@code lastUsedAt} yazması demek olurdu.
  */
 @Component
 public class ApiClientResolver {
@@ -26,15 +42,23 @@ public class ApiClientResolver {
     public static final String API_KEY_HEADER = "X-API-Key";
 
     private final CurrencyApiProperties properties;
+    private final ApiKeyStore apiKeyStore;
+    private final Clock clock;
 
-    public ApiClientResolver(CurrencyApiProperties properties) {
+    public ApiClientResolver(CurrencyApiProperties properties, ApiKeyStore apiKeyStore,
+                             Clock clock) {
         this.properties = properties;
+        this.apiKeyStore = apiKeyStore;
+        this.clock = clock;
     }
 
     /**
      * Yanlış yapılandırma <b>açılışta ve gürültülü</b> düşer: kimlik doğrulama açık ama hiç
-     * anahtar tanımlı değilse servis her isteği 401'leyerek "çalışıyor" görünürdü — sessiz ve
-     * teşhisi zor bir arıza. Ayağa kalkmaması, yanlış çalışmasından iyidir.
+     * statik anahtar tanımlı değilse servis her isteği 401'leyerek "çalışıyor" görünürdü —
+     * sessiz ve teşhisi zor bir arıza. Ayağa kalkmaması, yanlış çalışmasından iyidir.
+     *
+     * <p>Yalnız statik anahtarlar sayılır: dinamik depo boş olması bir açılış hatası değildir
+     * (admin henüz hiç anahtar oluşturmamış olabilir, bu normaldir).
      */
     @PostConstruct
     void validateConfiguration() {
@@ -44,7 +68,7 @@ public class ApiClientResolver {
                             + "(currency-api.auth.keys). Anahtarlar ortam degiskeninden verilir.");
         }
         if (properties.getAuth().isEnabled()) {
-            log.info("API anahtari dogrulamasi ACIK, tanimli tuketici sayisi={}",
+            log.info("API anahtari dogrulamasi ACIK, tanimli statik tuketici sayisi={}",
                     properties.getAuth().getKeys().size());
         } else {
             log.info("API anahtari dogrulamasi KAPALI (currency-api.auth.enabled=false)");
@@ -55,13 +79,35 @@ public class ApiClientResolver {
         return properties.getAuth().isEnabled();
     }
 
-    /** İstekteki anahtara karşılık gelen tüketici adı; anahtar yok/tanınmıyorsa boş. */
-    public Optional<String> resolve(HttpServletRequest request) {
-        String key = request.getHeader(API_KEY_HEADER);
-        if (key == null || key.isBlank()) {
+    /** @param consumerName tüketici adı, @param rateLimitOverride yalnız dinamik anahtarda dolu */
+    public record ResolvedClient(String consumerName, Integer rateLimitOverride) {
+    }
+
+    /**
+     * İsteği bir tüketiciye çözer — statik anahtar, yoksa dinamik anahtar (aktifse), yoksa boş.
+     * İptal edilmiş bir dinamik anahtar bulunamamış gibi davranır.
+     */
+    public Optional<ResolvedClient> resolveClient(HttpServletRequest request) {
+        Optional<String> rawKey = rawKey(request);
+        if (rawKey.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.ofNullable(properties.getAuth().getKeys().get(key.trim()));
+        String key = rawKey.get();
+
+        String staticConsumer = properties.getAuth().getKeys().get(key);
+        if (staticConsumer != null) {
+            return Optional.of(new ResolvedClient(staticConsumer, null));
+        }
+
+        return apiKeyStore.findByHash(ApiKeyHasher.sha256Hex(key))
+                .filter(ApiKeyRecord::isActive)
+                .map(record -> new ResolvedClient(record.consumerName(),
+                        touchLastUsed(record).rateLimitOverride()));
+    }
+
+    /** İstekteki anahtara karşılık gelen tüketici adı; anahtar yok/tanınmıyorsa boş. */
+    public Optional<String> resolve(HttpServletRequest request) {
+        return resolveClient(request).map(ResolvedClient::consumerName);
     }
 
     /**
@@ -74,5 +120,29 @@ public class ApiClientResolver {
      */
     public String rateLimitIdentity(HttpServletRequest request) {
         return resolve(request).orElseGet(() -> "ip:" + request.getRemoteAddr());
+    }
+
+    /**
+     * Bulunan kayıt best-effort {@code lastUsedAt} güncellemesiyle geri döner (fail-open: bu
+     * yazının kaybı güvenliği etkilemez, yetkilendirme kararı zaten verildi).
+     */
+    private ApiKeyRecord touchLastUsed(ApiKeyRecord record) {
+        try {
+            ApiKeyRecord updated = record.withLastUsedAt(clock.instant());
+            apiKeyStore.save(updated);
+            return updated;
+        } catch (Exception e) {
+            log.warn("son kullanim zamani guncellenemedi id={} sebep={}",
+                    record.id(), e.toString());
+            return record;
+        }
+    }
+
+    private Optional<String> rawKey(HttpServletRequest request) {
+        String key = request.getHeader(API_KEY_HEADER);
+        if (key == null || key.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(key.trim());
     }
 }
