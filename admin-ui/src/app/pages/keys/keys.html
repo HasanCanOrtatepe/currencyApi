@@ -1,100 +1,142 @@
-<div class="page">
-  <header>
-    <h1>API Anahtarları</h1>
-    <div class="actions">
-      <button class="secondary" (click)="showCreateForm = !showCreateForm">
-        + Yeni anahtar
-      </button>
-      <button class="ghost" (click)="logout()">Çıkış</button>
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="wordmark">
+      <div class="seal">KS</div>
+      <div class="wordmark-text">
+        <span class="title">Kur Servisi</span>
+        <span class="sub">Anahtar Yönetimi</span>
+      </div>
     </div>
-  </header>
+    <div class="masthead-right">
+      <span class="scope-pill">yalnız yerel erişim</span>
+      <button class="btn btn-ghost btn-sm" (click)="logout()">Çıkış</button>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-head">
+    <div>
+      <p class="kicker">Tanımlı Tüketiciler</p>
+      <h1>API Anahtarları</h1>
+    </div>
+    <button class="btn btn-primary" (click)="showCreateForm = !showCreateForm">
+      Yeni anahtar
+    </button>
+  </div>
 
   @if (error()) {
-    <p class="banner error">{{ error() }}</p>
+    <p class="banner" role="alert">{{ error() }}</p>
   }
 
   @if (showCreateForm) {
     <form class="create-form" (ngSubmit)="submitCreate()">
       <div class="field">
-        <label for="consumerName">Tüketici adı</label>
-        <input id="consumerName" name="consumerName" [(ngModel)]="newConsumerName" required />
-      </div>
-      <div class="field">
-        <label for="rateLimitOverride">Özel limit (istek/dk, boş = varsayılan)</label>
+        <label class="field-label" for="consumerName">Tüketici adı</label>
         <input
-          id="rateLimitOverride"
-          name="rateLimitOverride"
-          type="number"
-          min="1"
-          [(ngModel)]="newRateLimitOverride"
+          id="consumerName"
+          class="field-input"
+          name="consumerName"
+          [(ngModel)]="newConsumerName"
+          placeholder="crm"
+          required
         />
       </div>
-      <button type="submit" [disabled]="creating()">
+      <div class="field">
+        <label class="field-label" for="rateLimitOverride">Kota (istek/dk)</label>
+        <input
+          id="rateLimitOverride"
+          class="field-input"
+          type="number"
+          min="1"
+          name="rateLimitOverride"
+          [(ngModel)]="newRateLimitOverride"
+          placeholder="varsayılan"
+        />
+      </div>
+      <button type="submit" class="btn btn-primary" [disabled]="creating()">
         {{ creating() ? 'Oluşturuluyor…' : 'Oluştur' }}
       </button>
     </form>
   }
 
-  <table>
-    <thead>
-      <tr>
-        <th>Tüketici</th>
-        <th>Anahtar</th>
-        <th>Durum</th>
-        <th>Limit</th>
-        <th>Kalan</th>
-        <th>Oluşturuldu</th>
-        <th>Son kullanım</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      @for (row of rows(); track row.id) {
-        <tr [class.revoked]="!row.active">
-          <td>{{ row.consumerName }}</td>
-          <td><code>{{ row.keyPreview }}</code></td>
-          <td>
-            <span class="badge" [class.active]="row.active" [class.inactive]="!row.active">
-              {{ row.active ? 'aktif' : 'iptal' }}
-            </span>
-          </td>
-          <td>
-            {{ row.usageLimit }}
-            @if (!row.rateLimitOverride) {
-              <span class="muted-note">varsayılan</span>
-            }
-          </td>
-          <td>{{ row.usageRemaining }}</td>
-          <td>{{ row.createdAt | date: 'short' }}</td>
-          <td>{{ row.lastUsedAt ? (row.lastUsedAt | date: 'short') : '—' }}</td>
-          <td class="row-actions">
-            @if (row.active) {
-              <button class="ghost" (click)="startEditLimit(row)">Limit</button>
-              <button class="ghost danger" (click)="askRevoke(row)">İptal et</button>
-            }
-          </td>
-        </tr>
-      } @empty {
+  <div class="ledger">
+    <div class="ledger-head">
+      <span>Anahtar Defteri</span>
+      <span>{{ rows().length }} kayıt</span>
+    </div>
+    <table>
+      <thead>
         <tr>
-          <td colspan="8" class="empty">
-            {{ loading() ? 'Yükleniyor…' : 'Henüz anahtar yok.' }}
-          </td>
+          <th>Tüketici</th>
+          <th>Anahtar</th>
+          <th>Durum</th>
+          <th class="num">Kota</th>
+          <th class="num">Kalan</th>
+          <th>Oluşturuldu</th>
+          <th>Son kullanım</th>
+          <th></th>
         </tr>
-      }
-    </tbody>
-  </table>
-</div>
+      </thead>
+      <tbody>
+        @for (row of rows(); track row.id) {
+          <tr [class.revoked]="!row.active">
+            <td class="consumer">{{ row.consumerName }}</td>
+            <td><code>{{ row.keyPreview }}</code></td>
+            <td>
+              <span class="chip" [class.chip-active]="row.active" [class.chip-revoked]="!row.active">
+                {{ row.active ? 'aktif' : 'iptal' }}
+              </span>
+            </td>
+            <td class="num">
+              {{ row.usageLimit }}
+              @if (!row.rateLimitOverride) {
+                <span class="note">vars.</span>
+              }
+            </td>
+            <td class="num">{{ row.usageRemaining }}</td>
+            <td class="dim">{{ row.createdAt | date: 'dd.MM.yy HH:mm' }}</td>
+            <td class="dim">{{ row.lastUsedAt ? (row.lastUsedAt | date: 'dd.MM.yy HH:mm') : '—' }}</td>
+            <td>
+              @if (row.active) {
+                <div class="row-actions">
+                  <button class="btn btn-ghost btn-sm" (click)="startEditLimit(row)">Kota</button>
+                  <button class="btn btn-danger btn-sm" (click)="askRevoke(row)">İptal</button>
+                </div>
+              }
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="8" class="empty">
+              {{ loading() ? 'Yükleniyor…' : 'Henüz anahtar yok.' }}
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+    <div class="ledger-foot">
+      Kalan hak dakikalık pencere içindir · liste 10 saniyede bir yenilenir
+    </div>
+  </div>
+</main>
 
 @if (justCreated(); as created) {
   <div class="modal-backdrop">
     <div class="modal">
+      <p class="kicker">Tek Seferlik Gösterim</p>
       <h2>Anahtar oluşturuldu</h2>
-      <p class="warn">Bu anahtar yalnız ŞİMDİ gösteriliyor — kapattıktan sonra bir daha görüntülenemez.</p>
+      <p class="warn">
+        Bu anahtar yalnız <strong>şimdi</strong> görünüyor. Kapattıktan sonra hiçbir yerden
+        okunamaz — depoda yalnız özeti tutulur.
+      </p>
       <div class="raw-key">
         <code>{{ created.rawKey }}</code>
-        <button class="secondary" (click)="copyRawKey()">Kopyala</button>
+        <button class="btn btn-ghost btn-sm" (click)="copyRawKey()">Kopyala</button>
       </div>
-      <button (click)="closeReveal()">Anladım, kapat</button>
+      <div class="modal-actions">
+        <button class="btn btn-primary" (click)="closeReveal()">Anladım, kapat</button>
+      </div>
     </div>
   </div>
 }
@@ -102,13 +144,17 @@
 @if (editingLimitFor; as target) {
   <div class="modal-backdrop">
     <div class="modal">
-      <h2>Kotayı değiştir</h2>
-      <p>
-        <strong>{{ target.consumerName }}</strong> ({{ target.keyPreview }}) için dakika başına
-        istek sınırı. Boş bırakılırsa global varsayılan geçerli olur.
+      <p class="kicker">Kota Düzenleme</p>
+      <h2>{{ target.consumerName }}</h2>
+      <p class="muted">
+        <code>{{ target.keyPreview }}</code> için dakika başına istek sınırı.
+        Boş bırakılırsa global varsayılan geçerli olur.
       </p>
       <p class="warn">Anahtarın kendisi değişmez — tüketicinin elindeki değer çalışmaya devam eder.</p>
+      <label class="field-label" for="limit-input">İstek / dakika</label>
       <input
+        id="limit-input"
+        class="field-input"
         type="number"
         min="1"
         name="editingLimitValue"
@@ -116,8 +162,8 @@
         placeholder="varsayılan"
       />
       <div class="modal-actions">
-        <button class="ghost" (click)="cancelEditLimit()">Vazgeç</button>
-        <button (click)="saveLimit()">Kaydet</button>
+        <button class="btn btn-ghost" (click)="cancelEditLimit()">Vazgeç</button>
+        <button class="btn btn-primary" (click)="saveLimit()">Kaydet</button>
       </div>
     </div>
   </div>
@@ -126,15 +172,16 @@
 @if (revokeCandidate; as candidate) {
   <div class="modal-backdrop">
     <div class="modal">
+      <p class="kicker">Geri Alınamaz</p>
       <h2>Anahtarı iptal et</h2>
-      <p>
-        <strong>{{ candidate.consumerName }}</strong> ({{ candidate.keyPreview }}) tüketicisine
-        ait anahtarı iptal etmek üzeresiniz. Bu anahtarla yapılan istekler hemen sonra
-        reddedilir.
+      <p class="muted">
+        <strong>{{ candidate.consumerName }}</strong> (<code>{{ candidate.keyPreview }}</code>)
+        anahtarı iptal edilecek. Bu anahtarla gelen istekler <strong>hemen</strong> reddedilir
+        ve anahtar geri açılamaz.
       </p>
       <div class="modal-actions">
-        <button class="ghost" (click)="cancelRevoke()">Vazgeç</button>
-        <button class="danger" (click)="confirmRevoke()">İptal et</button>
+        <button class="btn btn-ghost" (click)="cancelRevoke()">Vazgeç</button>
+        <button class="btn btn-danger" (click)="confirmRevoke()">İptal et</button>
       </div>
     </div>
   </div>

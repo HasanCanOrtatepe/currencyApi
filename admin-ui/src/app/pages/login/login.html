@@ -1,11 +1,21 @@
 <div class="login-page">
   <form class="login-card" (ngSubmit)="submit()">
-    <h1>currency-api admin</h1>
+    <div class="card-head">
+      <div class="seal">KS</div>
+      <div class="head-text">
+        <span class="title">Kur Servisi</span>
+        <span class="sub">Anahtar Yönetimi</span>
+      </div>
+    </div>
+
+    <p class="kicker">Yetkili Erişim</p>
+    <h1>Panele giriş</h1>
     <p class="hint">Anahtar yönetimi için admin token'ınızı girin.</p>
 
-    <label for="token">Admin Token</label>
+    <label class="field-label" for="token">Admin Token</label>
     <input
       id="token"
+      class="field-input"
       type="password"
       name="token"
       [(ngModel)]="token"
@@ -14,11 +24,13 @@
     />
 
     @if (error()) {
-      <p class="error">{{ error() }}</p>
+      <p class="error" role="alert">{{ error() }}</p>
     }
 
-    <button type="submit" [disabled]="checking()">
+    <button type="submit" class="btn btn-primary submit" [disabled]="checking()">
       {{ checking() ? 'Kontrol ediliyor…' : 'Giriş yap' }}
     </button>
+
+    <p class="foot">Bu panel yalnız bu makineden erişilebilir.</p>
   </form>
 </div>

@@ -3,94 +3,82 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f4f5f7;
-  font-family: system-ui, -apple-system, sans-serif;
+  padding: 32px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Tanıtım sayfasının hero'sundaki 42px'lik yatay ızgara dokusu. */
+.login-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(var(--rule) 1px, transparent 1px);
+  background-size: 100% 42px;
+  opacity: .35;
+  pointer-events: none;
+  mask-image: linear-gradient(180deg, transparent, black 25%, black 65%, transparent);
 }
 
 .login-card {
-  width: 320px;
-  padding: 2rem;
-  border-radius: 12px;
-  background: #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 8px 24px rgba(0, 0, 0, 0.06);
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  background: var(--ink-2);
+  border: 1px solid var(--rule-brass);
+  border-radius: 4px;
+  padding: 32px;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 20px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--rule);
+}
+.head-text { display: flex; flex-direction: column; line-height: 1.1; }
+.head-text .title { font-family: var(--serif); font-weight: 620; font-size: 17px; letter-spacing: .02em; }
+.head-text .sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-top: 3px;
 }
 
 h1 {
-  font-size: 1.1rem;
-  margin: 0;
-  color: #111827;
+  font-family: var(--serif);
+  font-weight: 520;
+  font-size: 27px;
+  line-height: 1.15;
+  margin: 12px 0 8px;
 }
 
-.hint {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
-  color: #6b7280;
-}
+.hint { color: var(--text-mid); font-size: 14px; margin-bottom: 24px; }
 
-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #374151;
-}
-
-input {
-  padding: 0.6rem 0.7rem;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 0.95rem;
-}
-
-input:focus {
-  outline: 2px solid #2563eb;
-  outline-offset: 1px;
-}
-
-button {
-  margin-top: 0.5rem;
-  padding: 0.65rem;
-  border: none;
-  border-radius: 8px;
-  background: #2563eb;
-  color: white;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-button:disabled {
-  background: #93c5fd;
-  cursor: not-allowed;
-}
+.field-label { margin-top: 4px; }
 
 .error {
-  margin: 0;
-  color: #b91c1c;
-  font-size: 0.85rem;
+  margin-top: 14px;
+  color: var(--red-bright);
+  font-size: 13px;
+  border-left: 2px solid var(--red);
+  padding-left: 12px;
 }
 
-@media (prefers-color-scheme: dark) {
-  .login-page {
-    background: #0f1115;
-  }
-  .login-card {
-    background: #1a1d24;
-    box-shadow: none;
-    border: 1px solid #2a2e37;
-  }
-  h1 {
-    color: #f3f4f6;
-  }
-  .hint {
-    color: #9ca3af;
-  }
-  label {
-    color: #d1d5db;
-  }
-  input {
-    background: #11141a;
-    border-color: #2a2e37;
-    color: #f3f4f6;
-  }
+.submit { margin-top: 22px; justify-content: center; }
+
+.foot {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .04em;
+  color: var(--text-dim);
 }
