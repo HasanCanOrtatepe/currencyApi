@@ -3,256 +3,412 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>currency-api — TCMB Kur Servisi / TRY Exchange Rate API</title>
+<title>currency-api — TCMB Kur Servisi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap"
+  rel="stylesheet"
+/>
 <style>
+  /*
+   * Tasarım token'ları — CRM Lite (Etiya Akademi) frontend'inin styles.css dosyasındaki
+   * isimler ve değerlerle hizalıdır: aynı ürün ailesinin parçası gibi görünmesi için
+   * gri skalaya değil ANLAMA bağlanan renkler kullanılır (ink / line / panel / canvas).
+   * Marka turuncusu ve lacivert, Etiya logosundaki değerlerdir.
+   */
   :root {
+    color-scheme: light;
+
     --brand: #f58220;
-    --brand-ink: #b35e12;
+    --brand-600: #e07216;
+    --brand-text: #984b00;
+
     --navy: #242441;
-    --bg: #f5f6fa;
-    --page-ink: #1a1b2e;
-    --muted: #64667e;
-    --card-bg: #ffffff;
-    --card-border: #e7e8f2;
-    --code-bg: #1c1d33;
-    --code-ink: #e7e8f5;
-    --code-accent: #ffb266;
-    --hero-from: #242441;
-    --hero-to: #2f3059;
-    --hero-ink: #ffffff;
-    --hero-muted: rgba(255, 255, 255, 0.72);
-    --shadow: 0 1px 2px rgba(20, 21, 45, 0.04), 0 10px 30px rgba(20, 21, 45, 0.06);
+    --navy-deep: #191932;
+    --navy-lift: #2e2e55;
+
+    --canvas: #f0f2f5;
+    --panel: #ffffff;
+    --panel-muted: #fafafa;
+
+    --ink: #111827;
+    --ink-secondary: #374151;
+    --ink-muted: #6b7280;
+    --ink-subtle: #667085;
+
+    --line: rgb(17 24 39 / 9%);
+    --line-strong: rgb(17 24 39 / 15%);
+
+    --shadow-panel: 0 1px 2px rgb(0 0 0 / 5%), 0 8px 24px rgb(36 36 65 / 7%);
+
+    --code-bg: #1c1c33;
+    --code-ink: #e8e8f2;
+    --code-key: #ffb266;
+    --code-str: #b7e3c0;
+
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
   }
+
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0a0b14;
-      --page-ink: #eef0f8;
-      --muted: #9297b3;
-      --card-bg: #14152a;
-      --card-border: #262844;
-      --code-bg: #0e0f20;
-      --code-ink: #e7e8f5;
-      --code-accent: #ffb266;
-      --hero-from: #14152a;
-      --hero-to: #1f2044;
-      --hero-ink: #ffffff;
-      --hero-muted: rgba(255, 255, 255, 0.66);
-      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.35);
+      color-scheme: dark;
+      --canvas: #0a0a16;
+      --panel: #14142a;
+      --panel-muted: #10101f;
+      --ink: #f8fafc;
+      --ink-secondary: #d8e1ec;
+      --ink-muted: #a7b4c7;
+      --ink-subtle: #8494aa;
+      --line: rgb(148 163 184 / 18%);
+      --line-strong: rgb(148 163 184 / 30%);
+      --brand-text: #ffb84d;
+      --shadow-panel: 0 1px 2px rgb(0 0 0 / 28%), 0 12px 32px rgb(0 0 0 / 22%);
+      --code-bg: #0c0c1a;
     }
   }
+
   * { box-sizing: border-box; }
+
   body {
     margin: 0;
-    background: var(--bg);
-    color: var(--page-ink);
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
   }
 
-  /* ── Hero ───────────────────────────────────────────────────────── */
-  .hero {
-    background: linear-gradient(135deg, var(--hero-from) 0%, var(--hero-to) 100%);
-    color: var(--hero-ink);
-    padding: 3.5rem 1.5rem 4rem;
+  .shell { display: flex; min-height: 100vh; flex-direction: column; }
+  @media (min-width: 1024px) { .shell { flex-direction: row; } }
+
+  /* ── Marka paneli (CRM login ekranının sol paneliyle aynı dil) ──────── */
+  .brand-panel {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(145.59deg, var(--navy-deep) 6.17%, var(--navy) 45.62%, var(--navy-lift) 93.83%);
+    color: #fff;
+    padding: 2.5rem 2rem 3rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 3rem;
   }
-  .hero-inner { max-width: 760px; margin: 0 auto; }
+  @media (min-width: 1024px) {
+    .brand-panel {
+      flex-basis: 42%;
+      flex-shrink: 0;
+      /*
+       * `height` + `align-self` şart: yalnız `min-height` verilseydi panel, flex'in
+       * varsayılan `stretch` davranışıyla TÜM belge yüksekliğine uzardı ve
+       * `space-between` başlığı ekranın çok altına iterdi — ilk açılışta kullanıcı
+       * boş bir lacivert alan görürdü (ölçülerek bulundu).
+       */
+      height: 100vh;
+      align-self: flex-start;
+      position: sticky;
+      top: 0;
+      padding: 2.5rem 3rem 4.5rem;
+    }
+  }
+  /* Grid dokusu — login panelindeki 36px'lik ızgaranın aynısı */
+  .brand-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: 0.04;
+    background-image:
+      linear-gradient(rgba(255,255,255,1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,1) 1px, transparent 1px);
+    background-size: 36px 36px;
+    pointer-events: none;
+  }
+  /* Sol kenardaki turuncu aksan çizgisi */
+  .brand-panel::after {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    width: 4px;
+    opacity: 0.4;
+    background: linear-gradient(to bottom, transparent, var(--brand) 40%, transparent);
+    pointer-events: none;
+  }
+  .brand-panel > * { position: relative; }
+
   .mark {
     display: inline-grid;
-    grid-template-columns: repeat(2, 9px);
-    grid-template-rows: repeat(2, 9px);
+    grid-template-columns: repeat(3, 11px);
+    grid-auto-rows: 11px;
     gap: 3px;
-    margin-bottom: 1.25rem;
   }
-  .mark span { background: var(--brand); border-radius: 2px; }
-  .mark span:nth-child(3) { opacity: 0.55; }
+  .mark i { display: block; background: var(--brand); border-radius: 1px; }
+  .mark i.o60 { opacity: 0.6; }
+  .mark i.o30 { opacity: 0.3; }
+  .mark i.gap { background: transparent; }
+
   .kicker {
-    display: block;
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.09em;
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 1.2px;
     text-transform: uppercase;
     color: var(--brand);
-    margin-bottom: 0.6rem;
+    margin: 0 0 0.75rem;
   }
-  .hero h1 {
-    font-size: 2rem;
-    margin: 0 0 0.6rem;
-    letter-spacing: -0.01em;
-  }
-  .hero .lede {
-    color: var(--hero-muted);
+  .brand-panel h1 {
+    font-family: var(--font-display);
+    font-size: 2.25rem;
+    line-height: 1.2;
+    font-weight: 800;
     margin: 0;
-    font-size: 1rem;
-    max-width: 46ch;
+    letter-spacing: -0.015em;
   }
-  .hero .lede + .lede { margin-top: 0.4rem; }
-  .built-for {
-    margin-top: 1.75rem;
-    font-size: 0.8rem;
-    color: var(--hero-muted);
-    border-top: 1px solid rgba(255, 255, 255, 0.14);
-    padding-top: 1rem;
+  .brand-panel h1 .accent { color: var(--brand); }
+  .brand-panel .lede {
+    margin: 1rem 0 0;
+    max-width: 34ch;
+    font-size: 0.9rem;
+    line-height: 1.65;
+    color: rgb(255 255 255 / 50%);
   }
-  .built-for strong { color: var(--hero-ink); font-weight: 600; }
+  .brand-panel .lede + .lede { margin-top: 0.6rem; }
 
-  /* ── Content ────────────────────────────────────────────────────── */
-  .wrap { max-width: 760px; margin: -2rem auto 0; padding: 0 1.5rem 4rem; position: relative; }
-  section {
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: 14px;
-    box-shadow: var(--shadow);
+  .attribution {
+    margin-top: 2rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid rgb(255 255 255 / 12%);
+    font-size: 0.8rem;
+    color: rgb(255 255 255 / 45%);
+  }
+  .attribution strong { color: #fff; font-weight: 600; }
+
+  /* ── İçerik ────────────────────────────────────────────────────────── */
+  .content { flex: 1; min-width: 0; padding: 2.5rem 1.5rem 4rem; }
+  @media (min-width: 1024px) { .content { padding: 3.5rem 3rem 4rem; } }
+  .content-inner { max-width: 620px; margin: 0 auto; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow-panel);
     padding: 1.5rem 1.75rem;
     margin-bottom: 1.25rem;
   }
+  .card:last-child { margin-bottom: 0; }
+
   h2 {
-    font-size: 0.95rem;
+    font-family: var(--font-display);
+    font-size: 1rem;
     font-weight: 700;
     margin: 0 0 1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
+    color: var(--ink);
   }
-  h2::before {
-    content: "";
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--brand);
-    flex-shrink: 0;
-  }
-  p { margin: 0 0 0.75rem; color: var(--page-ink); }
+  p { margin: 0 0 0.75rem; color: var(--ink-secondary); }
   p:last-child { margin-bottom: 0; }
-  strong { color: var(--brand-ink); }
-  @media (prefers-color-scheme: dark) { strong { color: var(--code-accent); } }
+  .card strong { color: var(--brand-text); font-weight: 600; }
 
-  .bilingual {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1.25rem;
+  .split { display: grid; gap: 1.5rem; }
+  @media (min-width: 560px) {
+    .split { grid-template-columns: 1fr 1fr; gap: 1.75rem; }
+    .split > div + div { border-left: 1px solid var(--line); padding-left: 1.75rem; }
   }
-  @media (min-width: 640px) {
-    .bilingual { grid-template-columns: 1fr 1fr; }
-    .bilingual > div:last-child { border-left: 1px solid var(--card-border); padding-left: 1.25rem; }
-  }
-  .tag {
+  .lang {
     display: block;
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    color: var(--muted);
-    margin-bottom: 0.5rem;
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: var(--ink-subtle);
+    margin-bottom: 0.6rem;
   }
 
-  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.82rem; }
-  code {
-    background: var(--code-bg);
-    color: var(--code-accent);
-    padding: 0.1rem 0.4rem;
-    border-radius: 4px;
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.8125rem;
+  }
+  p code, td code {
+    background: var(--panel-muted);
+    border: 1px solid var(--line);
+    color: var(--brand-text);
+    padding: 0.05rem 0.35rem;
+    border-radius: 6px;
   }
   pre {
     background: var(--code-bg);
     color: var(--code-ink);
     padding: 1rem 1.1rem;
-    border-radius: 10px;
+    border-radius: 12px;
     overflow-x: auto;
     margin: 0;
+    line-height: 1.65;
   }
-  pre .k { color: var(--code-accent); }
+  pre .key { color: var(--code-key); }
+  pre .str { color: var(--code-str); }
+  pre .cm { color: rgb(232 232 242 / 45%); }
 
-  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.75rem; }
-  th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--card-border); vertical-align: top; }
-  th { color: var(--muted); font-weight: 600; white-space: nowrap; }
-  tr:last-child td, tr:last-child th { border-bottom: none; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 1rem; }
+  th, td { text-align: left; padding: 0.6rem 0.7rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th {
+    font-family: var(--font-display);
+    color: var(--ink-subtle);
+    font-weight: 600;
+    white-space: nowrap;
+    font-size: 0.8rem;
+  }
+  td { color: var(--ink-secondary); }
+  tr:last-child th, tr:last-child td { border-bottom: none; }
+
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--ink-muted);
+    margin-bottom: 1rem;
+  }
+  .status .dot {
+    width: 7px; height: 7px; border-radius: 999px;
+    background: #047857;
+    box-shadow: 0 0 0 3px rgb(4 120 87 / 15%);
+  }
 
   footer {
-    text-align: center;
+    margin-top: 2rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--line);
     font-size: 0.8rem;
-    color: var(--muted);
-    padding: 2rem 1.5rem 0;
+    color: var(--ink-subtle);
   }
-  footer .dot { color: var(--brand); margin: 0 0.4rem; }
 </style>
 </head>
 <body>
 
-<div class="hero">
-  <div class="hero-inner">
-    <span class="mark"><span></span><span></span><span></span><span></span></span>
-    <span class="kicker">TCMB Tabanlı Kur Servisi · TCMB-Backed FX API</span>
-    <h1>currency-api</h1>
-    <p class="lede">TR: TCMB'nin resmî döviz kurlarını normalize edip önbellekli, anahtarlı bir API olarak sunar.</p>
-    <p class="lede">EN: Serves TCMB's official exchange rates through a cached, key-protected API.</p>
-    <div class="built-for">Etiya Telekom Lite projesi için geliştirildi · Built for the <strong>Etiya Telekom Lite</strong> project</div>
-  </div>
-</div>
+<div class="shell">
 
-<div class="wrap">
+  <aside class="brand-panel">
+    <span class="mark" aria-hidden="true">
+      <i class="gap"></i><i class="o60"></i><i></i>
+      <i class="gap"></i><i class="o60"></i><i></i>
+      <i class="o30"></i><i class="o60"></i><i></i>
+    </span>
 
-  <section>
-    <h2>Bu servis ne yapar? / What does it do?</h2>
-    <div class="bilingual">
-      <div>
-        <span class="tag">TR</span>
-        <p>
-          TCMB'nin günlük döviz kuru belgesini çeker, 15 dakikalık bir tazelik penceresiyle
-          önbelleğe alır ve kendi JSON sözleşmesiyle sunar. Kurlar TCMB'nin o günkü resmî
-          yayınıdır — anlık piyasa kuru değil, en fazla 15 dakika gecikmeli TCMB verisidir.
-        </p>
-        <p>Erişim için bir <strong>API anahtarı</strong> gerekir. Anahtarınız yoksa servisi size verenle iletişime geçin.</p>
-      </div>
-      <div>
-        <span class="tag">EN</span>
-        <p>
-          Fetches TCMB's daily exchange-rate bulletin, caches it for up to 15 minutes, and
-          serves it through our own JSON contract. Rates reflect TCMB's official daily
-          publication — not a live market feed.
-        </p>
-        <p>An <strong>API key</strong> is required. If you don't have one, contact whoever gave you this address.</p>
-      </div>
+    <div>
+      <p class="kicker">Kur Servisi · Exchange Rate API</p>
+      <h1>Merkez Bankası kuru,<br /><span class="accent">tek bir uçtan.</span></h1>
+      <p class="lede">
+        TR: TCMB'nin resmî günlük kurlarını normalize eder, önbelleğe alır ve anahtar
+        korumalı tek bir JSON sözleşmesiyle sunar.
+      </p>
+      <p class="lede">
+        EN: Normalises TCMB's official daily rates and serves them through a single,
+        cached, key-protected JSON contract.
+      </p>
+      <p class="attribution">
+        <strong>Etiya Telekom Lite</strong> projesi için geliştirilmiş bağımsız mikroservis<br />
+        An independent microservice built for the Etiya Telekom Lite project
+      </p>
     </div>
-  </section>
+  </aside>
 
-  <section>
-    <h2>Örnek istek / Example request</h2>
-    <pre>curl "https://kur.etiyapi.com/api/v1/rates?symbols=USD,EUR" \
-  -H "<span class="k">X-API-Key</span>: &lt;anahtarınız / your key&gt;"</pre>
-  </section>
+  <main class="content">
+    <div class="content-inner">
 
-  <section>
-    <h2>Cevap / Response</h2>
-    <pre>{
-  "<span class="k">base</span>": "TRY",
-  "<span class="k">rateDate</span>": "2026-08-12",
-  "<span class="k">rates</span>": [
-    { "currency": "USD", "rate": 0.0209, "unitPrice": 47.73 }
+      <p class="status"><span class="dot"></span> Servis çalışıyor / Operational</p>
+
+      <section class="card">
+        <h2>Genel bakış / Overview</h2>
+        <div class="split">
+          <div>
+            <span class="lang">TR</span>
+            <p>
+              TCMB'nin günlük döviz kuru belgesi çekilir, 15 dakikalık tazelik penceresiyle
+              önbelleğe alınır ve kendi JSON sözleşmemizle sunulur. Kurlar TCMB'nin o günkü
+              <strong>resmî yayınıdır</strong> — anlık piyasa kuru değildir.
+            </p>
+            <p>Erişim için API anahtarı gerekir; anahtarınız yoksa servisi size verenle iletişime geçin.</p>
+          </div>
+          <div>
+            <span class="lang">EN</span>
+            <p>
+              Fetches TCMB's daily bulletin, caches it within a 15-minute freshness window and
+              serves it through our own JSON contract. Rates reflect TCMB's
+              <strong>official daily publication</strong> — not a live market feed.
+            </p>
+            <p>An API key is required. If you don't have one, contact whoever gave you this address.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>İstek / Request</h2>
+        <pre>curl "https://kur.etiyapi.com/api/v1/rates?symbols=USD,EUR" \
+  -H "<span class="key">X-API-Key</span>: <span class="str">&lt;anahtarınız / your key&gt;</span>"</pre>
+        <table>
+          <tr>
+            <th>symbols</th>
+            <td>Opsiyonel. Verilmezse tüm kurlar döner. / Optional — omit to receive every supported currency.</td>
+          </tr>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Cevap / Response</h2>
+        <pre>{
+  "<span class="key">base</span>": <span class="str">"TRY"</span>,
+  "<span class="key">rateDate</span>": <span class="str">"2026-08-12"</span>,   <span class="cm">// TCMB yayın günü / publication date</span>
+  "<span class="key">rates</span>": [
+    { "currency": <span class="str">"USD"</span>, "rate": 0.0209, "unitPrice": 47.73 }
   ]
 }</pre>
-    <table>
-      <tr><th>rate</th><td>1 TRY kaç &lt;currency&gt; eder / how much 1 TRY is worth in &lt;currency&gt;</td></tr>
-      <tr><th>unitPrice</th><td>1 &lt;currency&gt; kaç TRY eder / how much 1 &lt;currency&gt; is worth in TRY</td></tr>
-    </table>
-  </section>
+        <table>
+          <tr>
+            <th>rate</th>
+            <td>1 TRY kaç birim eder / how much 1 TRY is worth in that currency</td>
+          </tr>
+          <tr>
+            <th>unitPrice</th>
+            <td>1 birim kaç TRY eder / how much one unit is worth in TRY</td>
+          </tr>
+        </table>
+      </section>
 
-  <section>
-    <h2>Kota / Rate limit</h2>
-    <div class="bilingual">
-      <div>
-        <span class="tag">TR</span>
-        <p>Her anahtarın dakika başına bir istek sınırı vardır (aşılırsa <code>429</code> + <code>Retry-After</code> döner). Sınır anahtarınıza göre değişebilir.</p>
-      </div>
-      <div>
-        <span class="tag">EN</span>
-        <p>Each key has a per-minute request limit (returns <code>429</code> + <code>Retry-After</code> when exceeded). The limit may vary per key.</p>
-      </div>
+      <section class="card">
+        <h2>Kota / Rate limit</h2>
+        <div class="split">
+          <div>
+            <span class="lang">TR</span>
+            <p>
+              Her anahtarın dakika başına istek sınırı vardır. Aşıldığında <code>429</code> ve
+              ne zaman tekrar denenebileceğini söyleyen <code>Retry-After</code> döner.
+            </p>
+          </div>
+          <div>
+            <span class="lang">EN</span>
+            <p>
+              Each key carries a per-minute request limit. Exceeding it returns <code>429</code>
+              together with a <code>Retry-After</code> header telling you when to retry.
+            </p>
+          </div>
+        </div>
+        <table>
+          <tr><th>200</th><td>Kur döndü / rates returned</td></tr>
+          <tr><th>401</th><td>Anahtar yok ya da tanınmıyor / missing or unknown key</td></tr>
+          <tr><th>429</th><td>Kota aşıldı / rate limit exceeded</td></tr>
+          <tr><th>503</th><td>Elde hiç kur yok / no rate available at all</td></tr>
+        </table>
+      </section>
+
+      <footer>currency-api · TCMB kur servisi / TCMB exchange rate service</footer>
+
     </div>
-  </section>
+  </main>
 
 </div>
-
-<footer>currency-api<span class="dot">·</span>TCMB kur servisi / TCMB exchange rate service</footer>
 
 </body>
 </html>
