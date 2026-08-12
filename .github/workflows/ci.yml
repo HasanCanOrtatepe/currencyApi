@@ -1,0 +1,56 @@
+# Testler artık YALNIZ elle koşmuyor.
+#
+# Bu depo iki bağımsız yapıya sahiptir (backend Maven + admin-ui npm) ve bunlar bilinçli
+# olarak ayrı yaşam döngülerindedir; iş akışı da onları AYRI job olarak koşar: birinin
+# kırılması diğerinin sonucunu gizlemesin.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: backend (Java 25 · Maven)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+
+      # Testler ALTYAPISIZDIR (Redis/ağ gerekmez): saat enjekte edilir, Redis destekli
+      # sınıflar birim testte kullanılmaz. Bu yüzden CI'da servis konteyneri kaldırılmaz.
+      - name: mvn test
+        run: mvn -B -ntp test
+
+      - name: mvn package (derleme + paketleme kırılmasın)
+        run: mvn -B -ntp -DskipTests package
+
+  admin-ui:
+    name: admin-ui (Angular)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: admin-ui/package-lock.json
+
+      - name: npm ci
+        run: npm ci
+
+      - name: birim testleri
+        run: npx ng test --watch=false
+
+      - name: prod build
+        run: npx ng build

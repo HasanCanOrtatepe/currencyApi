@@ -65,6 +65,22 @@ export class AdminApiService {
     );
   }
 
+  /** Yalnız limiti değiştirir — anahtarın kendisi değişmez, tüketici etkilenmez. */
+  async updateRateLimit(id: string, rateLimitOverride: number | null): Promise<void> {
+    const base = await this.baseUrl();
+    const token = this.session.token();
+    if (!token) {
+      throw new Error('oturum yok');
+    }
+    await firstValueFrom(
+      this.http.patch<void>(
+        `${base}/admin/keys/${id}/rate-limit`,
+        { rateLimitOverride },
+        { headers: await this.headers(token) },
+      ),
+    );
+  }
+
   async revokeKey(id: string): Promise<void> {
     const base = await this.baseUrl();
     const token = this.session.token();

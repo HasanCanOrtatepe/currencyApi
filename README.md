@@ -134,9 +134,45 @@ Farklar CRM'in geliştirme compose'undaki bloğa göre bilinçlidir:
 > kalırdı — yani ağın en çok gerektiği anda. Doğrulandı (2026-08-12): tam yeniden başlatmanın
 > ardından ilk istek `FRESH_CACHE` döndü.
 
-> **8095'i internete yönlendirmeyin.** Anahtar düz HTTP üzerinde açık gider ve yol boyunca
-> okunabilir; LAN'da kabul edilebilir, dışarı açılacaksa önüne TLS sonlandıran bir ters vekil
-> konur.
+> **8095'i düz HTTP ile internete yönlendirmeyin.** Anahtar açık gider ve yol boyunca
+> okunabilir. Dışarı açılacaksa önüne TLS sonlandıran bir katman konur — aşağıdaki tünel
+> kurulumu tam olarak bunu yapar.
+
+### İnternete açma (Cloudflare Tunnel + alan adı)
+
+Tüketiciler farklı ağlardaysa LAN adresi yetmez; IP de DHCP ile değişebilir. Kalıcı çözüm,
+router'a dokunmadan dışarı doğru açılan **isimli bir Cloudflare tüneli**dir: TLS'i Cloudflare
+sonlandırır, makinenin gerçek IP'si görünmez ve adres bir daha değişmez.
+
+```bash
+cloudflared tunnel login                 # tarayıcıdan alan adı yetkilendirmesi
+cloudflared tunnel create currency-api
+cloudflared tunnel route dns currency-api kur.<alan-adiniz>
+```
+
+`~/.cloudflared/config.yml` — **yalnız 8095 yönlendirilir:**
+
+```yaml
+tunnel: <tunnel-id>
+credentials-file: /Users/<siz>/.cloudflared/<tunnel-id>.json
+ingress:
+  # Admin yüzeyi (8096/8097) BİLİNÇLİ olarak yok: tünel path değil TÜM portu taşır,
+  # dolayısıyla buraya eklenmeyen bir port internetten yapısal olarak erişilemez.
+  - hostname: kur.<alan-adiniz>
+    service: http://localhost:8095
+  - service: http_status:404
+```
+
+Tüketici tarafında (CRM) tek fark base URL'dir:
+
+```
+CRM_CURRENCY_PROVIDER=currencyapi
+CRM_CURRENCY_CURRENCYAPI_BASE_URL=https://kur.<alan-adiniz>
+CRM_CURRENCY_CURRENCYAPI_API_KEY=<admin panelden üretilmiş anahtar>
+```
+
+> Kök yol (`/`) anahtar istemez: servisi tanıtan statik bir sayfadır
+> (`src/main/resources/static/index.html`), veri döndürmez.
 
 ## Anahtar ve kota (ticari API davranışı)
 
@@ -207,10 +243,16 @@ Bir de `admin-ui/` altında bu API'nin üstüne ince bir Angular arayüzü vard�
 oluşturma formu, tek seferlik gösterim, iptal) — `podman compose up -d --build` ile
 `http://<bu-makine>:8096`'da ayağa kalkar, o da yalnız LAN'a açıktır.
 
-## Simülatör yüzü (tüketici testleri)
+## Simülatör yüzü (tüketici testleri) — **varsayılan KAPALI**
 
 Servis, gerçek satıcıların uçlarını taklit eden bir yüzey de sunar — tüketicilerin **kendi**
-dayanıklılık davranışlarını sınayabilmesi için (gerçek TCMB'ye "şimdi çök" diyemezsiniz):
+dayanıklılık davranışlarını sınayabilmesi için (gerçek TCMB'ye "şimdi çök" diyemezsiniz).
+
+> **Açmak için `CURRENCY_SIMULATOR_ENABLED=true` gerekir; verilmezse bu uçlar 404'tür.**
+> Sebep: kaos uçları kimlik doğrulaması **istemez** (kaosu süren duman testinin elinde anahtar
+> yoktur) ve durum **değiştirir**. İnternete açılmış bir serviste bu ikisi bir arada, uzaktan
+> erişilebilir bir arıza düğmesidir — `TCMB_BASE_URL` simülatöre çevrildiği anda yabancı biri
+> kur akışını durdurabilirdi.
 
 ```
 GET  /kurlar/today.xml                       TCMB şekli
@@ -232,8 +274,16 @@ değil **test edilebilirliğin** parçasıdır.
 ## Test
 
 ```bash
-mvn test        # 15 test: yön çevirme, Unit çarpanı, XXE, cache-aside, son geçerli kur, retention
+mvn test                                   # 88 test — backend
+cd admin-ui && npx ng test --watch=false   # 14 test — admin paneli
 ```
 
-Testler **altyapısızdır** (Redis/ağ gerekmez): saat enjekte edilir, böylece 15 dakikalık tazelik
-sınırı gerçekten beklemeden sınanır.
+Backend testleri **altyapısızdır** (Redis/ağ gerekmez): saat enjekte edilir, böylece 15 dakikalık
+tazelik sınırı gerçekten beklemeden sınanır. Kapsam: yön çevirme, `Unit` çarpanı, XXE,
+cache-aside, son geçerli kur, retention, anahtar/kota kapıları, dinamik anahtar yaşam döngüsü,
+admin token kapısı, correlation ID ve dil çözümü.
+
+İkisi de her push/PR'da GitHub Actions ile koşar (`.github/workflows/ci.yml`).
+
+> Redis destekli sınıfların birim testi **yoktur** ve bu belgelenmiş bir boşluktur
+> (testcontainers bağımlılığı eklenmedi); onlar `podman compose` ile ayakta sınanır.

@@ -44,10 +44,13 @@ public class ApiGuardFilter extends OncePerRequestFilter {
 
     private final ApiClientResolver clients;
     private final RateLimiter rateLimiter;
+    private final ApiMessages messages;
 
-    public ApiGuardFilter(ApiClientResolver clients, RateLimiter rateLimiter) {
+    public ApiGuardFilter(ApiClientResolver clients, RateLimiter rateLimiter,
+                          ApiMessages messages) {
         this.clients = clients;
         this.rateLimiter = rateLimiter;
+        this.messages = messages;
     }
 
     /**
@@ -78,7 +81,8 @@ public class ApiGuardFilter extends OncePerRequestFilter {
         if (clients.isAuthEnabled() && resolved.isEmpty()) {
             log.warn("gecersiz ya da eksik API anahtari path={} remote={}",
                     request.getRequestURI(), request.getRemoteAddr());
-            write(response, HttpStatus.UNAUTHORIZED, "invalid or missing API key");
+            write(response, HttpStatus.UNAUTHORIZED,
+                    messages.get(request, "error.unauthorized"));
             return;
         }
 
@@ -95,7 +99,8 @@ public class ApiGuardFilter extends OncePerRequestFilter {
         if (!decision.allowed()) {
             // Retry-After: tüketici ne zaman döneceğini TAHMİN ETMEK zorunda kalmamalı.
             response.setHeader(RETRY_AFTER_HEADER, String.valueOf(decision.retryAfterSeconds()));
-            write(response, HttpStatus.TOO_MANY_REQUESTS, "rate limit exceeded");
+            write(response, HttpStatus.TOO_MANY_REQUESTS,
+                    messages.get(request, "error.rateLimitExceeded"));
             return;
         }
 

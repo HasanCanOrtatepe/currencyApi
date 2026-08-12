@@ -29,6 +29,10 @@ export class Keys implements OnInit, OnDestroy {
 
   revokeCandidate: AdminApiKeyRow | null = null;
 
+  /** Limiti düzenlenen satır — anahtarın kendisi değişmez, yalnız kotası. */
+  editingLimitFor: AdminApiKeyRow | null = null;
+  editingLimitValue: number | null = null;
+
   private pollHandle: ReturnType<typeof setInterval> | null = null;
 
   constructor(
@@ -91,6 +95,29 @@ export class Keys implements OnInit, OnDestroy {
     const created = this.justCreated();
     if (created) {
       await navigator.clipboard.writeText(created.rawKey);
+    }
+  }
+
+  startEditLimit(row: AdminApiKeyRow): void {
+    this.editingLimitFor = row;
+    this.editingLimitValue = row.rateLimitOverride;
+  }
+
+  cancelEditLimit(): void {
+    this.editingLimitFor = null;
+    this.editingLimitValue = null;
+  }
+
+  async saveLimit(): Promise<void> {
+    if (!this.editingLimitFor) {
+      return;
+    }
+    try {
+      await this.api.updateRateLimit(this.editingLimitFor.id, this.editingLimitValue);
+      this.cancelEditLimit();
+      await this.refresh();
+    } catch {
+      this.error.set('Limit güncellenemedi.');
     }
   }
 

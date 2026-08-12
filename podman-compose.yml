@@ -104,6 +104,15 @@ services:
       # Tunnel yalniz 8095'i biliyor — bu port doğası gereği internetten erişilemez, ama aynı
       # LAN'dan erişilebilir olsun diye tüm arayüzlere bağlanır (127.0.0.1 değil).
       - "${CURRENCY_ADMIN_PORT:-8097}:${CURRENCY_ADMIN_PORT:-8097}"
+    healthcheck:
+      # /actuator/health anahtar İSTEMEZ (ApiGuardFilter muafiyeti) — orkestratörün elinde
+      # admin token'ı yoktur. Sağlıksızlığı görmenin başka yolu olmazdı: restart yalnız süreç
+      # ÖLDÜĞÜNDE devreye girer, "ayakta ama cevap vermiyor" durumunu yakalamaz.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/${CURRENCY_ADMIN_PORT:-8097} && printf 'GET /actuator/health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     restart: unless-stopped
 
   # Angular admin paneli — currency-api-admin'in (8097) üstüne ince bir arayüz. Kendi imajı,
@@ -118,6 +127,13 @@ services:
       - currency-api-admin
     ports:
       - "8096:80"
+    healthcheck:
+      # nginx:alpine'de curl yok; wget BusyBox ile gelir.
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/index.html"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
 
 volumes:

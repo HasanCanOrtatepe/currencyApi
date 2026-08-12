@@ -11,6 +11,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 
 /**
@@ -40,6 +42,9 @@ public class ApiClientResolver {
 
     /** Ticari kur API'lerinin yaygın başlığı — tüketiciler için tanıdık olsun. */
     public static final String API_KEY_HEADER = "X-API-Key";
+
+    /** {@code lastUsedAt} bu aralıktan sık güncellenmez — bkz. {@link #touchLastUsed}. */
+    private static final Duration LAST_USED_RESOLUTION = Duration.ofMinutes(1);
 
     private final CurrencyApiProperties properties;
     private final ApiKeyStore apiKeyStore;
@@ -125,10 +130,21 @@ public class ApiClientResolver {
     /**
      * Bulunan kayıt best-effort {@code lastUsedAt} güncellemesiyle geri döner (fail-open: bu
      * yazının kaybı güvenliği etkilemez, yetkilendirme kararı zaten verildi).
+     *
+     * <h2>Neden her istekte yazılmıyor</h2>
+     * Bu alan yalnız admin panelindeki "son kullanım" sütunu içindir; dakika hassasiyeti
+     * fazlasıyla yeterlidir. Her istekte yazılsaydı <b>okuma yolundaki her çağrı bir Redis
+     * yazması üretirdi</b> — kotası 120/dk olan tek bir tüketici bile dakikada 120 gereksiz
+     * yazma demektir ve bu, sırf bir gösterge alanı için ödenen bir bedeldir.
      */
     private ApiKeyRecord touchLastUsed(ApiKeyRecord record) {
+        Instant now = clock.instant();
+        if (record.lastUsedAt() != null
+                && Duration.between(record.lastUsedAt(), now).compareTo(LAST_USED_RESOLUTION) < 0) {
+            return record;
+        }
         try {
-            ApiKeyRecord updated = record.withLastUsedAt(clock.instant());
+            ApiKeyRecord updated = record.withLastUsedAt(now);
             apiKeyStore.save(updated);
             return updated;
         } catch (Exception e) {

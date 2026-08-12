@@ -2,6 +2,7 @@ package com.ohbsy.currencyapi.api.controllers;
 
 import com.ohbsy.currencyapi.api.dtos.AdminApiKeyCreateRequest;
 import com.ohbsy.currencyapi.api.dtos.AdminApiKeyCreatedResponse;
+import com.ohbsy.currencyapi.api.dtos.AdminApiKeyRateLimitRequest;
 import com.ohbsy.currencyapi.api.dtos.AdminApiKeyRow;
 import com.ohbsy.currencyapi.api.dtos.AdminApiKeysResponse;
 import com.ohbsy.currencyapi.business.abstracts.ApiKeyService;
@@ -14,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -81,6 +83,25 @@ public class AdminApiKeyController {
                 .map(this::toRow)
                 .toList();
         return ResponseEntity.ok(new AdminApiKeysResponse(rows));
+    }
+
+    /**
+     * Yalnız hız sınırını değiştirir — anahtarın kendisi DEĞİŞMEZ, tüketicinin elindeki değer
+     * çalışmaya devam eder. {@code rateLimitOverride: null} global varsayılana döndürür.
+     */
+    @PatchMapping("/{id}/rate-limit")
+    public ResponseEntity<Void> updateRateLimit(@PathVariable String id,
+                                                @RequestBody AdminApiKeyRateLimitRequest request) {
+        try {
+            return apiKeyService.updateRateLimit(id, request.rateLimitOverride())
+                    ? ResponseEntity.noContent().build()
+                    : ResponseEntity.notFound().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            log.error("hiz siniri guncellenemedi id={} sebep={}", id, e.toString());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
     }
 
     @DeleteMapping("/{id}")

@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("ApiKeyServiceImpl — create/list/revoke")
 class ApiKeyServiceImplTest {
@@ -57,6 +58,49 @@ class ApiKeyServiceImplTest {
     @DisplayName("revoke bilinmeyen id için false döner")
     void revokeUnknownIdReturnsFalse() {
         assertThat(service.revoke("hic-var-olmayan-id")).isFalse();
+    }
+
+    /**
+     * Limit değiştirmek için anahtarı iptal edip yenisini üretmek gerekseydi, her kota ayarı
+     * tüketiciye YENİ ANAHTAR DAĞITMAYI gerektirirdi.
+     */
+    @Test
+    @DisplayName("updateRateLimit limiti değiştirir ama ANAHTARI değiştirmez")
+    void updateRateLimitKeepsKeyIntact() {
+        ApiKeyCreationResult created = service.create("crm", null);
+        String hashBefore = store.findById(created.id()).orElseThrow().keyHash();
+
+        boolean result = service.updateRateLimit(created.id(), 42);
+
+        assertThat(result).isTrue();
+        assertThat(store.findById(created.id()).orElseThrow().rateLimitOverride()).isEqualTo(42);
+        assertThat(store.findById(created.id()).orElseThrow().keyHash()).isEqualTo(hashBefore);
+    }
+
+    @Test
+    @DisplayName("updateRateLimit(null) global varsayılana döndürür")
+    void updateRateLimitToNullRestoresGlobalDefault() {
+        ApiKeyCreationResult created = service.create("crm", 5);
+
+        service.updateRateLimit(created.id(), null);
+
+        assertThat(store.findById(created.id()).orElseThrow().rateLimitOverride()).isNull();
+        assertThat(service.list().get(0).usageLimit()).isEqualTo(120);
+    }
+
+    @Test
+    @DisplayName("updateRateLimit bilinmeyen id için false döner")
+    void updateRateLimitUnknownIdReturnsFalse() {
+        assertThat(service.updateRateLimit("hic-var-olmayan-id", 10)).isFalse();
+    }
+
+    @Test
+    @DisplayName("Sıfır ya da negatif limit reddedilir")
+    void updateRateLimitRejectsNonPositive() {
+        ApiKeyCreationResult created = service.create("crm", null);
+
+        assertThatThrownBy(() -> service.updateRateLimit(created.id(), 0))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

@@ -22,7 +22,7 @@ class AdminAuthFilterTest {
         properties = new CurrencyApiProperties();
         properties.getAdmin().setEnabled(true);
         properties.getAdmin().setToken("dogru-token");
-        filter = new AdminAuthFilter(properties);
+        filter = new AdminAuthFilter(properties, TestMessages.create());
     }
 
     private MockHttpServletRequest adminRequest(String token) {
@@ -95,13 +95,40 @@ class AdminAuthFilterTest {
         return request;
     }
 
+    /**
+     * 401 "burada bir admin yüzeyi var ama token'ın yanlış" demektir ve internete açık public
+     * instance'ta admin API'sinin VARLIĞINI doğrular. Kapalı kurulumda o yüzey gerçekten yoktur.
+     */
+    @Test
+    @DisplayName("Admin KAPALIYKEN /admin/** → 404 (401 DEĞİL, varlığını doğrulamasın)")
+    void disabledAdminReturns404() throws Exception {
+        properties.getAdmin().setEnabled(false);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(adminRequest("dogru-token"), response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(404);
+    }
+
+    @Test
+    @DisplayName("Türkçe isteyen istemciye hata metni Türkçe döner")
+    void errorMessageIsLocalised() throws Exception {
+        MockHttpServletRequest request = adminRequest(null);
+        request.addHeader("Accept-Language", "tr");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getContentAsString()).contains("gecersiz ya da eksik");
+    }
+
     @Test
     @DisplayName("admin.enabled=true ama token boş → AÇILIŞTA düşer")
     void enabledWithoutTokenFailsFast() {
         CurrencyApiProperties broken = new CurrencyApiProperties();
         broken.getAdmin().setEnabled(true);
 
-        assertThatThrownBy(() -> new AdminAuthFilter(broken).validateConfiguration())
+        assertThatThrownBy(() -> new AdminAuthFilter(broken, TestMessages.create()).validateConfiguration())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("token bos");
     }

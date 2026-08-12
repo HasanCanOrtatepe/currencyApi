@@ -38,9 +38,11 @@ public class AdminAuthFilter extends OncePerRequestFilter {
     private static final String ADMIN_TOKEN_HEADER = "X-Admin-Token";
 
     private final CurrencyApiProperties properties;
+    private final ApiMessages messages;
 
-    public AdminAuthFilter(CurrencyApiProperties properties) {
+    public AdminAuthFilter(CurrencyApiProperties properties, ApiMessages messages) {
         this.properties = properties;
+        this.messages = messages;
     }
 
     /**
@@ -74,6 +76,15 @@ public class AdminAuthFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
+
+        // Admin KAPALIYKEN 404 — 401 DEĞİL. 401, "burada bir admin yüzeyi var ama token'ın
+        // yanlış" demektir ve internete açık public instance'ta admin API'sinin VARLIĞINI
+        // doğrular. Kapalı bir kurulumda o yüzey gerçekten yoktur; cevabı da öyle olmalıdır.
+        if (!properties.getAdmin().isEnabled()) {
+            response.setStatus(HttpStatus.NOT_FOUND.value());
+            return;
+        }
+
         String provided = request.getHeader(ADMIN_TOKEN_HEADER);
         String expected = properties.getAdmin().getToken();
 
@@ -85,7 +96,8 @@ public class AdminAuthFilter extends OncePerRequestFilter {
                     request.getRequestURI(), request.getRemoteAddr());
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            response.getWriter().write("{\"error\":\"invalid or missing admin token\"}");
+            response.getWriter().write("{\"error\":\""
+                    + messages.get(request, "error.adminUnauthorized") + "\"}");
             return;
         }
 

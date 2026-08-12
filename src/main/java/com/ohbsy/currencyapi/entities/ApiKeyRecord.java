@@ -82,4 +82,14 @@ public record ApiKeyRecord(
         return new ApiKeyRecord(id, consumerName, keyHash, keyPreview, createdAt, revokedAt,
                 rateLimitOverride, at);
     }
+
+    /**
+     * Yeni bir kopya: hız sınırı değiştirilmiş hâli. {@code null} verilmesi "global varsayılana
+     * dön" demektir — anahtarın kendisi (hash, önizleme, kimlik) değişmez, dolayısıyla
+     * tüketicinin elindeki anahtar çalışmaya devam eder.
+     */
+    public ApiKeyRecord withRateLimitOverride(Integer limit) {
+        return new ApiKeyRecord(id, consumerName, keyHash, keyPreview, createdAt, revokedAt,
+                limit, lastUsedAt);
+    }
 }

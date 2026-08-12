@@ -201,6 +201,25 @@ tr.revoked {
   gap: 0.5rem;
 }
 
+.modal input[type='number'] {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  width: 100%;
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
+.muted-note {
+  color: #9ca3af;
+  font-size: 0.72rem;
+  margin-left: 0.35rem;
+}
+
 @media (prefers-color-scheme: dark) {
   :host {
     background: #0f1115;
@@ -235,5 +254,10 @@ tr.revoked {
   }
   .raw-key {
     background: #11141a;
+  }
+  .modal input[type='number'] {
+    background: #11141a;
+    border-color: #2a2e37;
+    color: #f3f4f6;
   }
 }

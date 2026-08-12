@@ -73,6 +73,19 @@ public class ApiKeyServiceImpl implements ApiKeyService {
         return true;
     }
 
+    @Override
+    public boolean updateRateLimit(String id, Integer rateLimitOverride) {
+        if (rateLimitOverride != null && rateLimitOverride < 1) {
+            throw new IllegalArgumentException("rateLimitOverride en az 1 olmalidir");
+        }
+        Optional<ApiKeyRecord> existing = apiKeyStore.findById(id);
+        if (existing.isEmpty()) {
+            return false;
+        }
+        apiKeyStore.save(existing.get().withRateLimitOverride(rateLimitOverride));
+        return true;
+    }
+
     private ApiKeyUsageView toUsageView(ApiKeyRecord record) {
         // peek: sayaci ARTIRMAZ, yalniz okur — listeleme bir tuketim degildir.
         RateLimiter.Decision usage = rateLimiter.peek(record.consumerName(),

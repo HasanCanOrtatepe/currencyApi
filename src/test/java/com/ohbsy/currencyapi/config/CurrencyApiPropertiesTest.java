@@ -116,6 +116,19 @@ class CurrencyApiPropertiesTest {
      * Desen host'u serbest bırakır (LAN'daki herhangi bir cihaz), yalnız admin-ui'nin portunu
      * sabit tutar — bkz. {@code CurrencyApiProperties.Admin.corsOriginPattern} sınıf yorumu.
      */
+    /**
+     * Kaos uçları kimlik doğrulaması İSTEMEZ ve durum DEĞİŞTİRİR; internete açık bir serviste
+     * varsayılan açık olsaydı uzaktan erişilebilir bir arıza düğmesi olurdu.
+     */
+    @Test
+    @DisplayName("Simülatör varsayılanı KAPALI ve ortamdan açılabilir")
+    void simulatorDefaultsToDisabled() {
+        assertThat(new CurrencyApiProperties().getSimulator().isEnabled()).isFalse();
+
+        CurrencyApiProperties enabled = bind(Map.of("currency-api.simulator.enabled", "true"));
+        assertThat(enabled.getSimulator().isEnabled()).isTrue();
+    }
+
     @Test
     @DisplayName("cors-origin-pattern ortamdan bağlanır")
     void corsOriginPatternBindsFromEnvironment() {

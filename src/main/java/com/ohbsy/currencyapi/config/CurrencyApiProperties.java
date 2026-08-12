@@ -23,6 +23,7 @@ public class CurrencyApiProperties {
     private final Auth auth = new Auth();
     private final RateLimit rateLimit = new RateLimit();
     private final Admin admin = new Admin();
+    private final Simulator simulator = new Simulator();
 
     public Cache getCache() {
         return cache;
@@ -42,6 +43,32 @@ public class CurrencyApiProperties {
 
     public Admin getAdmin() {
         return admin;
+    }
+
+    public Simulator getSimulator() {
+        return simulator;
+    }
+
+    /**
+     * Sahte satıcı yüzeyi ({@code /kurlar/**}, {@code /stats/**}) ve kaos uçları
+     * ({@code /__mode}, {@code /__settings}, {@code /__reset}).
+     *
+     * <p><b>Varsayılan KAPALI:</b> kaos uçları kimlik doğrulaması istemez (kaosu süren duman
+     * testinin elinde anahtar yoktur) ve durum değiştirir. İnternete açılmış bir serviste bu
+     * ikisi bir arada uzaktan erişilebilir bir arıza düğmesidir. Yalnız tüketici testlerinde
+     * ({@code CURRENCY_SIMULATOR_ENABLED=true}) açılır.
+     */
+    public static class Simulator {
+
+        private boolean enabled = false;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
     }
 
     /**

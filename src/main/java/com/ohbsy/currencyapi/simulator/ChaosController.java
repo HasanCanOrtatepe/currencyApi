@@ -1,5 +1,6 @@
 package com.ohbsy.currencyapi.simulator;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,8 +23,19 @@ import java.util.Map;
  * <p><b>Yol {@code /__mode}'dur ve altçizgiyle başlar</b>: satıcının gerçek yüzeyiyle
  * karışmasın. Gerçek TCMB/ECB'de böyle bir uç yoktur ve olmamalıdır — bu uç, taklidin
  * kendisinin değil <b>test edilebilirliğin</b> parçasıdır.
+ *
+ * <h2>Varsayılan KAPALI — pazarlıksız</h2>
+ * Bu uç <b>kimlik doğrulaması istemez</b> ({@code ApiGuardFilter} {@code /__} önekini muaf
+ * tutar; kaosu süren duman testinin elinde anahtar yoktur) ve <b>durum değiştirir</b>. Servis
+ * bir tünelin ardından internete açıldığında bu ikisi bir arada, uzaktan erişilebilir bir
+ * "servisi bozma düğmesi" demektir: {@code TCMB_BASE_URL} simülatöre çevrildiği anda
+ * ({@code README}'de anlatılan tüketici testi senaryosu) yabancı biri kur akışını
+ * durdurabilirdi. Bu yüzden simülatör yüzeyi ancak <b>bilinçli olarak</b>
+ * {@code currency-api.simulator.enabled=true} verildiğinde vardır; verilmezse bean hiç
+ * kurulmaz ve yol düz 404'tür.
  */
 @RestController
+@ConditionalOnProperty(name = "currency-api.simulator.enabled", havingValue = "true")
 public class ChaosController {
 
     private final ChaosState chaos;

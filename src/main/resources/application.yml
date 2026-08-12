@@ -59,6 +59,12 @@ currency-api:
     # Angular admin-ui'nin origin DESENİ — yalnız /admin/** için CORS izni. Host serbest
     # (LAN'daki herhangi bir cihazdan erişilebilsin), yalnız admin-ui'nin portu (8096) sabit.
     cors-origin-pattern: ${CURRENCY_ADMIN_CORS_ORIGIN_PATTERN:http://*:8096}
+  simulator:
+    # Sahte satıcı yüzeyi (/kurlar/**, /stats/**) ve kaos uçları (/__mode, /__settings, /__reset).
+    # Varsayılan KAPALI: kaos uçları anahtar İSTEMEZ (kaosu süren duman testinin elinde anahtar
+    # yoktur) ve durum DEĞİŞTİRİR. İnternete açılmış bir serviste bu ikisi bir arada, uzaktan
+    # erişilebilir bir arıza düğmesidir. Yalnız tüketici testlerinde açılır.
+    enabled: ${CURRENCY_SIMULATOR_ENABLED:false}
 
 management:
   endpoints:
@@ -83,3 +89,8 @@ management:
 logging:
   level:
     com.ohbsy.currencyapi: INFO
+  pattern:
+    # Correlation ID her satıra basılır (CorrelationIdFilter MDC'ye koyar). Tüketicinin
+    # logundaki kimlikle bizimki böyle eşleşir; olmadığında iki logu zaman damgasıyla
+    # gözle hizalamak gerekirdi. Filtre dışında üretilen satırlarda alan boş kalır.
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{correlationId:--}] %logger{36} -- %msg%n"

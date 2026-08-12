@@ -13,6 +13,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -104,5 +105,47 @@ class ApiClientResolverTest {
     @DisplayName("Anahtarsız istek çözülmez")
     void noKeyDoesNotResolve() {
         assertThat(resolver.resolveClient(request(null))).isEmpty();
+    }
+
+    /**
+     * {@code lastUsedAt} yalnız admin panelindeki gösterge içindir. Her istekte yazılsaydı
+     * OKUMA yolundaki her çağrı bir Redis YAZMASI üretirdi — kotası 120/dk olan tek bir
+     * tüketici bile dakikada 120 gereksiz yazma demektir.
+     */
+    @Test
+    @DisplayName("lastUsedAt her istekte YAZILMAZ (dakikada bir yeter)")
+    void lastUsedAtIsThrottled() {
+        String rawKey = ApiKeyHasher.generateRawKey();
+        apiKeyStore.save(new ApiKeyRecord("id-4", "crm",
+                ApiKeyHasher.sha256Hex(rawKey), ApiKeyHasher.preview(rawKey),
+                FIXED.instant(), null, null, null));
+
+        // İlk çözümleme yazar (lastUsedAt henüz null).
+        resolver.resolveClient(request(rawKey));
+        Instant afterFirst = apiKeyStore.findById("id-4").orElseThrow().lastUsedAt();
+        assertThat(afterFirst).isEqualTo(FIXED.instant());
+
+        // Saat İLERLEMEDİĞİ için ikinci çözümleme yeniden yazmamalı.
+        resolver.resolveClient(request(rawKey));
+
+        assertThat(apiKeyStore.findById("id-4").orElseThrow().lastUsedAt())
+                .isEqualTo(afterFirst);
+    }
+
+    @Test
+    @DisplayName("Bir dakika geçtikten sonra lastUsedAt yeniden yazılır")
+    void lastUsedAtIsWrittenAfterResolutionWindow() {
+        String rawKey = ApiKeyHasher.generateRawKey();
+        apiKeyStore.save(new ApiKeyRecord("id-5", "crm",
+                ApiKeyHasher.sha256Hex(rawKey), ApiKeyHasher.preview(rawKey),
+                FIXED.instant(), null, null, FIXED.instant()));
+
+        Instant later = FIXED.instant().plusSeconds(90);
+        ApiClientResolver laterResolver = new ApiClientResolver(
+                properties, apiKeyStore, Clock.fixed(later, ZoneOffset.UTC));
+
+        laterResolver.resolveClient(request(rawKey));
+
+        assertThat(apiKeyStore.findById("id-5").orElseThrow().lastUsedAt()).isEqualTo(later);
     }
 }

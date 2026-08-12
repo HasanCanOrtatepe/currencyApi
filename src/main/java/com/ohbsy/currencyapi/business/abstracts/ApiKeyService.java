@@ -25,4 +25,15 @@ public interface ApiKeyService {
 
     /** @return bilinmeyen {@code id} için {@code false} (controller bunu 404'e çevirir) */
     boolean revoke(String id);
+
+    /**
+     * Anahtarın hız sınırını değiştirir. {@code null} = global varsayılana dön.
+     *
+     * <p>Anahtarın kendisi DEĞİŞMEZ: tüketicinin elindeki değer çalışmaya devam eder. Limit
+     * değiştirmek için anahtarı iptal edip yenisini üretmek gerekseydi, her kota ayarı
+     * tüketiciye yeni anahtar dağıtmayı gerektirirdi.
+     *
+     * @return bilinmeyen {@code id} için {@code false}
+     */
+    boolean updateRateLimit(String id, Integer rateLimitOverride);
 }

@@ -58,12 +58,18 @@
               {{ row.active ? 'aktif' : 'iptal' }}
             </span>
           </td>
-          <td>{{ row.usageLimit }}</td>
+          <td>
+            {{ row.usageLimit }}
+            @if (!row.rateLimitOverride) {
+              <span class="muted-note">varsayılan</span>
+            }
+          </td>
           <td>{{ row.usageRemaining }}</td>
           <td>{{ row.createdAt | date: 'short' }}</td>
           <td>{{ row.lastUsedAt ? (row.lastUsedAt | date: 'short') : '—' }}</td>
-          <td>
+          <td class="row-actions">
             @if (row.active) {
+              <button class="ghost" (click)="startEditLimit(row)">Limit</button>
               <button class="ghost danger" (click)="askRevoke(row)">İptal et</button>
             }
           </td>
@@ -89,6 +95,30 @@
         <button class="secondary" (click)="copyRawKey()">Kopyala</button>
       </div>
       <button (click)="closeReveal()">Anladım, kapat</button>
+    </div>
+  </div>
+}
+
+@if (editingLimitFor; as target) {
+  <div class="modal-backdrop">
+    <div class="modal">
+      <h2>Kotayı değiştir</h2>
+      <p>
+        <strong>{{ target.consumerName }}</strong> ({{ target.keyPreview }}) için dakika başına
+        istek sınırı. Boş bırakılırsa global varsayılan geçerli olur.
+      </p>
+      <p class="warn">Anahtarın kendisi değişmez — tüketicinin elindeki değer çalışmaya devam eder.</p>
+      <input
+        type="number"
+        min="1"
+        name="editingLimitValue"
+        [(ngModel)]="editingLimitValue"
+        placeholder="varsayılan"
+      />
+      <div class="modal-actions">
+        <button class="ghost" (click)="cancelEditLimit()">Vazgeç</button>
+        <button (click)="saveLimit()">Kaydet</button>
+      </div>
     </div>
   </div>
 }

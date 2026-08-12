@@ -23,9 +23,12 @@ public class AdminCorsConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
+        // Listeye YENİ BİR METOT EKLERKEN burayı güncellemeyi unutma: eksik metot yalnız
+        // TARAYICIDA kırılır (curl CORS uygulamaz), yani birim testleri ve elle curl denemeleri
+        // geçerken panel sessizce çalışmaz. PATCH bu şekilde bir kez atlandı.
         registry.addMapping("/admin/**")
                 .allowedOriginPatterns(properties.getAdmin().getCorsOriginPattern())
-                .allowedMethods("GET", "POST", "DELETE")
+                .allowedMethods("GET", "POST", "PATCH", "DELETE")
                 .allowedHeaders("X-Admin-Token", "Content-Type");
     }
 }

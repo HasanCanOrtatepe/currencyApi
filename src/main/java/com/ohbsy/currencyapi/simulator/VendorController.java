@@ -2,6 +2,7 @@ package com.ohbsy.currencyapi.simulator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -17,8 +18,13 @@ import java.util.Map;
  * T34 Faz 7 — iki satıcının günlük kur uçları. <b>Yollar gerçek satıcıların yollarıdır</b>
  * ({@code /kurlar/today.xml}, {@code /stats/eurofxref/eurofxref-daily.xml}); CRM tarafında
  * {@code fake} ile {@code real} arasındaki tek fark base URL olsun diye.
+ *
+ * <p>Kaos ucuyla aynı bayrağa bağlıdır ({@code currency-api.simulator.enabled}, varsayılan
+ * KAPALI): sahte satıcı yüzeyi bir <b>test aracıdır</b> ve üretimde sunulan imajda hiç
+ * bulunmamalıdır — bkz. {@link ChaosController} sınıf yorumu.
  */
 @RestController
+@ConditionalOnProperty(name = "currency-api.simulator.enabled", havingValue = "true")
 public class VendorController {
 
     private static final Logger log = LoggerFactory.getLogger(VendorController.class);

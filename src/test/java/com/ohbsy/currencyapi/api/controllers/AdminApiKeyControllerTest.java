@@ -1,6 +1,7 @@
 package com.ohbsy.currencyapi.api.controllers;
 
 import com.ohbsy.currencyapi.api.dtos.AdminApiKeyCreateRequest;
+import com.ohbsy.currencyapi.api.dtos.AdminApiKeyRateLimitRequest;
 import com.ohbsy.currencyapi.business.abstracts.ApiKeyService;
 import com.ohbsy.currencyapi.business.concretes.ApiKeyCreationResult;
 import com.ohbsy.currencyapi.business.concretes.ApiKeyServiceImpl;
@@ -78,6 +79,29 @@ class AdminApiKeyControllerTest {
     }
 
     @Test
+    @DisplayName("PATCH rate-limit bilinen id → 204, bilinmeyen → 404")
+    void updateRateLimitStatuses() {
+        var created = controller.create(new AdminApiKeyCreateRequest("crm", null)).getBody();
+
+        assertThat(controller.updateRateLimit(created.id(),
+                new AdminApiKeyRateLimitRequest(42)).getStatusCode())
+                .isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(controller.updateRateLimit("hic-var-olmayan-id",
+                new AdminApiKeyRateLimitRequest(42)).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("PATCH rate-limit geçersiz değer → 400")
+    void updateRateLimitRejectsInvalidValue() {
+        var created = controller.create(new AdminApiKeyCreateRequest("crm", null)).getBody();
+
+        assertThat(controller.updateRateLimit(created.id(),
+                new AdminApiKeyRateLimitRequest(0)).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     @DisplayName("Depo hatası → 503, detay sızdırmaz")
     void storeFailureYields503WithoutLeakingDetail() {
         ApiKeyService failing = new ApiKeyService() {
@@ -93,6 +117,11 @@ class AdminApiKeyControllerTest {
 
             @Override
             public boolean revoke(String id) {
+                return false;
+            }
+
+            @Override
+            public boolean updateRateLimit(String id, Integer rateLimitOverride) {
                 return false;
             }
         };

@@ -52,7 +52,7 @@ class ApiGuardFilterTest {
         apiKeyStore = new InMemoryApiKeyStore();
         clients = new ApiClientResolver(properties, apiKeyStore, FIXED);
         RateLimiter limiter = new InMemoryRateLimiter(properties, FIXED);
-        filter = new ApiGuardFilter(clients, limiter);
+        filter = new ApiGuardFilter(clients, limiter, TestMessages.create());
     }
 
     private MockHttpServletRequest request(String key) {
