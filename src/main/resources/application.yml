@@ -40,6 +40,15 @@ management:
       probes:
         enabled: true
       show-details: when-authorized
+  health:
+    redis:
+      # KAPALI — bilinçli. Cache bir HIZLANDIRICIDIR, bağımlılık değil: Redis erişilemezken
+      # servis kuru sağlayıcıdan çekmeye devam eder (fail-open). Redis göstergesi açık
+      # bırakılsaydı sağlık ucu DOWN'a düşer, orkestratör de kur sunabilen sağlıklı bir
+      # instance'ı öldürür ya da yük dengeleyiciden düşürürdü — yani cache kesintisi
+      # SERVİS kesintisine terfi ederdi. Sağlık ucu "kur sunabiliyor muyum" sorusunu
+      # cevaplamalıdır, "cache'im ayakta mı" sorusunu değil.
+      enabled: false
 
 logging:
   level:
