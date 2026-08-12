@@ -318,8 +318,8 @@ değil **test edilebilirliğin** parçasıdır.
 ## Test
 
 ```bash
-mvn test                                   # 88 test — backend
-cd admin-ui && npx ng test --watch=false   # 14 test — admin paneli
+mvn test                                   # 96 test — backend
+cd admin-ui && npx ng test --watch=false   # 25 test — admin paneli
 ```
 
 Backend testleri **altyapısızdır** (Redis/ağ gerekmez): saat enjekte edilir, böylece 15 dakikalık

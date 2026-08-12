@@ -147,7 +147,8 @@ class ApiGuardFilterTest {
     @Test
     @DisplayName("Tanıtım sayfası VE varlıkları anahtar istemez")
     void publicStaticAssetsAreExempt() {
-        for (String path : new String[] {"/", "/index.html", "/favicon.svg", "/logo.svg"}) {
+        for (String path : new String[] {"/", "/index.html", "/favicon.svg", "/favicon-32.png",
+                "/apple-touch-icon.png", "/logo.svg"}) {
             assertThat(filter.shouldNotFilter(new MockHttpServletRequest("GET", path)))
                     .as("muaf olmalı: %s", path)
                     .isTrue();

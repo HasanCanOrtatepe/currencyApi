@@ -68,8 +68,9 @@ public class ApiGuardFilter extends OncePerRequestFilter {
      * TAM ADLARLA yazılır: yeni bir varlık eklendiğinde buraya da eklenmesi gerekir ve
      * "/static altındaki her şey serbest" gibi geniş bir kural açılmaz.
      */
-    private static final Set<String> PUBLIC_STATIC_PATHS =
-            Set.of("/", "/index.html", "/favicon.svg", "/logo.svg");
+    private static final Set<String> PUBLIC_STATIC_PATHS = Set.of(
+            "/", "/index.html",
+            "/favicon.svg", "/favicon-32.png", "/apple-touch-icon.png", "/logo.svg");
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
