@@ -149,6 +149,56 @@ class ApiGuardFilterTest {
         assertThat(filter.shouldNotFilter(indexHtml)).isTrue();
     }
 
+    /**
+     * Pano gerçek kuru göstermelidir; alternatif olan "sayfaya anahtar gömmek" anahtarı
+     * yakmak olurdu. Bu yüzden önizleme ucu anahtarsızdır.
+     */
+    @Test
+    @DisplayName("Önizleme ucu anahtarsız GEÇER (tanıtım panosu için)")
+    void publicPreviewPassesWithoutKey() throws Exception {
+        MockHttpServletRequest request =
+                new MockHttpServletRequest("GET", "/api/v1/rates/preview");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    /**
+     * {@code shouldNotFilter} ile muaf tutulsaydı hız sınırı da uygulanmazdı ve herkese açık
+     * bir uç sınırsız kalırdı.
+     */
+    @Test
+    @DisplayName("Önizleme ucu anahtarsız ama SINIRSIZ değil — kota IP başına uygulanır")
+    void publicPreviewIsStillRateLimited() throws Exception {
+        properties.getRateLimit().setLimit(2);
+
+        for (int i = 0; i < 2; i++) {
+            MockHttpServletResponse ok = new MockHttpServletResponse();
+            filter.doFilter(new MockHttpServletRequest("GET", "/api/v1/rates/preview"), ok,
+                    new MockFilterChain());
+            assertThat(ok.getStatus()).isEqualTo(200);
+        }
+
+        MockHttpServletResponse blocked = new MockHttpServletResponse();
+        filter.doFilter(new MockHttpServletRequest("GET", "/api/v1/rates/preview"), blocked,
+                new MockFilterChain());
+
+        assertThat(blocked.getStatus()).isEqualTo(429);
+    }
+
+    /** Muafiyet TAM EŞLEŞMEDİR: asıl kur ucu anahtar istemeye devam etmelidir. */
+    @Test
+    @DisplayName("Muafiyet asıl /api/v1/rates ucuna SIZMAZ")
+    void previewExemptionDoesNotLeakToMainEndpoint() throws Exception {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request(null), response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
     @Test
     @DisplayName("Kimlik doğrulama kapalıyken anahtarsız istek geçer (sınır yine uygulanır)")
     void authDisabledAllowsAnonymous() throws Exception {

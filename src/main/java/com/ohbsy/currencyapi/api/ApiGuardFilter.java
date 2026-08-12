@@ -38,6 +38,9 @@ public class ApiGuardFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(ApiGuardFilter.class);
 
+    /** Tanıtım sayfasının panosu — anahtarsız, ama hız sınırına tabi (bkz. doFilterInternal). */
+    private static final String PUBLIC_PREVIEW_PATH = "/api/v1/rates/preview";
+
     private static final String LIMIT_HEADER = "X-RateLimit-Limit";
     private static final String REMAINING_HEADER = "X-RateLimit-Remaining";
     private static final String RETRY_AFTER_HEADER = "Retry-After";
@@ -78,7 +81,10 @@ public class ApiGuardFilter extends OncePerRequestFilter {
         // yalnizca BIR kez gidilir, asagida hem kimlik hem override ayni sonuctan turetilir.
         Optional<ApiClientResolver.ResolvedClient> resolved = clients.resolveClient(request);
 
-        if (clients.isAuthEnabled() && resolved.isEmpty()) {
+        // Tanıtım panosunun önizleme ucu ANAHTAR İSTEMEZ ama filtreden ÇIKARILMAZ: shouldNotFilter
+        // ile muaf tutulsaydı hız sınırı da uygulanmazdı ve herkese açık bir uç sınırsız kalırdı.
+        // Böylece anonim istek IP kimliğiyle sayılmaya devam eder.
+        if (clients.isAuthEnabled() && resolved.isEmpty() && !isPublicPreview(request)) {
             log.warn("gecersiz ya da eksik API anahtari path={} remote={}",
                     request.getRequestURI(), request.getRemoteAddr());
             write(response, HttpStatus.UNAUTHORIZED,
@@ -105,6 +111,11 @@ public class ApiGuardFilter extends OncePerRequestFilter {
         }
 
         chain.doFilter(request, response);
+    }
+
+    /** Tam eşleşme: {@code /api/v1/rates} ile başlayan diğer yollar anahtar istemeye devam eder. */
+    private boolean isPublicPreview(HttpServletRequest request) {
+        return PUBLIC_PREVIEW_PATH.equals(request.getRequestURI());
     }
 
     private void write(HttpServletResponse response, HttpStatus status, String message)

@@ -171,8 +171,12 @@ CRM_CURRENCY_CURRENCYAPI_BASE_URL=https://kur.<alan-adiniz>
 CRM_CURRENCY_CURRENCYAPI_API_KEY=<admin panelden üretilmiş anahtar>
 ```
 
-> Kök yol (`/`) anahtar istemez: servisi tanıtan statik bir sayfadır
-> (`src/main/resources/static/index.html`), veri döndürmez.
+> **Anahtarsız iki yol var:** kök yol (`/`) servisi tanıtan statik sayfadır ve
+> `GET /api/v1/rates/preview` o sayfadaki panoyu besler. Önizleme ucu **ürünün yerine geçmez**
+> — yalnız birkaç para birimi ve yalnız `unitPrice` döner; çevrim yönü (`rate`), tazelik ve
+> sağlayıcı bilgisi yoktur. Anahtarsızdır çünkü herkese açık bir sayfaya anahtar gömmek onu
+> yakmak olurdu; buna karşılık **kota IP başına uygulanmaya devam eder** ve yeni bir TCMB
+> isteği üretmez (aynı 15 dakikalık cache'ten okur).
 
 ## Anahtar ve kota (ticari API davranışı)
 

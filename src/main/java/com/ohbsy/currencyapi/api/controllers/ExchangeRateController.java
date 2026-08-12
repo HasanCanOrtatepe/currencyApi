@@ -2,6 +2,7 @@ package com.ohbsy.currencyapi.api.controllers;
 
 import com.ohbsy.currencyapi.api.dtos.ExchangeRateRow;
 import com.ohbsy.currencyapi.api.dtos.ExchangeRatesResponse;
+import com.ohbsy.currencyapi.api.dtos.RatePreviewResponse;
 import com.ohbsy.currencyapi.business.abstracts.ExchangeRateService;
 import com.ohbsy.currencyapi.business.concretes.RateResult;
 import com.ohbsy.currencyapi.entities.CurrencyCode;
@@ -41,6 +42,10 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/v1/rates")
 public class ExchangeRateController {
 
+    /** Tanıtım panosunda gösterilenler — sıra ekrandaki sırayla aynıdır. */
+    private static final List<CurrencyCode> PREVIEW_CURRENCIES =
+            List.of(CurrencyCode.USD, CurrencyCode.EUR, CurrencyCode.GBP, CurrencyCode.JPY);
+
     private final ExchangeRateService exchangeRateService;
 
     public ExchangeRateController(ExchangeRateService exchangeRateService) {
@@ -59,6 +64,39 @@ public class ExchangeRateController {
                     .build();
         }
         return ResponseEntity.ok(toResponse(result, parseSymbols(symbols)));
+    }
+
+    /**
+     * Tanıtım sayfasının kur panosu — <b>anahtar İSTEMEZ</b> ({@code ApiGuardFilter} bu yolu
+     * kimlik doğrulamasından muaf tutar; hız sınırı IP başına uygulanmaya devam eder).
+     *
+     * <h2>Neden anahtarsız bir uç var</h2>
+     * Ana sayfadaki pano gerçek kuru göstermelidir; sabit yazılmış sayılar bir <i>kur
+     * servisinin</i> vitrininde eskiyip yanlışa döner. Alternatif olan "sayfaya anahtar gömmek"
+     * ise anahtarı yakmak demektir: herkes kaynağı görüp kotayı harcayabilirdi.
+     *
+     * <p><b>Ürünün yerine geçmez</b> ve bu bilinçlidir: yalnız birkaç para birimi, yalnız
+     * gösterim alanları ({@code unitPrice}) döner. Entegrasyon için gereken çevrim yönü
+     * ({@code rate}), tazelik ve sağlayıcı bilgisi burada YOKTUR. Yeni bir satıcı isteği de
+     * üretmez — aynı 15 dakikalık cache'ten okur.
+     */
+    @GetMapping("/preview")
+    public ResponseEntity<RatePreviewResponse> preview() {
+        RateResult result = exchangeRateService.currentRates();
+        if (!result.hasRates()) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .header("Retry-After", "60")
+                    .build();
+        }
+
+        ExchangeRateSnapshot snapshot = result.snapshot();
+        List<RatePreviewResponse.Row> rows = PREVIEW_CURRENCIES.stream()
+                .filter(snapshot.availableCurrencies()::contains)
+                .map(code -> new RatePreviewResponse.Row(
+                        code.name(), snapshot.unitPriceOf(code)))
+                .toList();
+
+        return ResponseEntity.ok(new RatePreviewResponse(snapshot.rateDate(), rows));
     }
 
     /**

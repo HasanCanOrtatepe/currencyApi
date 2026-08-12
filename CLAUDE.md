@@ -79,6 +79,7 @@ bu riskten muaftır (bellek içi) — Redis kesintisinde ayakta kalması gereken
 | Yüzey | Port | Sınır |
 |---|---|---|
 | Tüketici API (`/api/v1/rates`) | 8095 | İnternete açık (Cloudflare tüneli), `X-API-Key` ister |
+| Tanıtım sayfası (`/`) + önizleme (`/api/v1/rates/preview`) | 8095 | Anahtarsız, ama **kota IP başına uygulanır** |
 | Admin API (`/admin/**`) | 8097 | **LAN-only** — tünel bu portu bilmez; `X-Admin-Token` ister |
 | Admin panel (Angular) | 8096 | **LAN-only** |
 
@@ -107,5 +108,10 @@ testlerinde açılır.
   Gelen değere güvenilmez: yalnız harf/rakam/`-`/`_` ve makul uzunluk kabul edilir (log forging).
 - **İki kur yönü de sunulur** (`rate` = 1 TRY kaç birim, `unitPrice` = 1 birim kaç TRY).
   Dönüşümü her tüketicinin ayrı yapması sessiz yön hatalarının kaynağıdır.
+- **`/api/v1/rates/preview` anahtarsızdır ve ürünün yerine geçmez:** yalnız birkaç para birimi
+  ve yalnız `unitPrice` döner; `rate` (çevrim yönü), `provider`, `cache`, `stale` YOKTUR.
+  Tanıtım sayfasındaki panoyu besler — sayfaya anahtar gömmek onu yakmak olurdu, sabit yazılmış
+  sayılar ise bir kur servisinin vitrininde eskiyip yanlışa dönerdi. `ApiGuardFilter`'da
+  **tam eşleşmeyle** auth'tan muaftır ama filtreden çıkarılmaz: hız sınırı uygulanmaya devam eder.
 - **Bayat kur 200'dür**, 5xx değil: elde kullanılabilir veri varken tüketiciyi hataya
   düşürmek yanlış olurdu. Hiç kur yoksa 503 + `Retry-After`.

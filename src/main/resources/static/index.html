@@ -1,414 +1,643 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>currency-api — TCMB Kur Servisi</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link
-  href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap"
-  rel="stylesheet"
-/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kur Servisi · TCMB Kur Bülteni API</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,380;0,9..144,520;0,9..144,620;1,9..144,460&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  /*
-   * Tasarım token'ları — CRM Lite (Etiya Akademi) frontend'inin styles.css dosyasındaki
-   * isimler ve değerlerle hizalıdır: aynı ürün ailesinin parçası gibi görünmesi için
-   * gri skalaya değil ANLAMA bağlanan renkler kullanılır (ink / line / panel / canvas).
-   * Marka turuncusu ve lacivert, Etiya logosundaki değerlerdir.
-   */
-  :root {
-    color-scheme: light;
-
-    --brand: #f58220;
-    --brand-600: #e07216;
-    --brand-text: #984b00;
-
-    --navy: #242441;
-    --navy-deep: #191932;
-    --navy-lift: #2e2e55;
-
-    --canvas: #f0f2f5;
-    --panel: #ffffff;
-    --panel-muted: #fafafa;
-
-    --ink: #111827;
-    --ink-secondary: #374151;
-    --ink-muted: #6b7280;
-    --ink-subtle: #667085;
-
-    --line: rgb(17 24 39 / 9%);
-    --line-strong: rgb(17 24 39 / 15%);
-
-    --shadow-panel: 0 1px 2px rgb(0 0 0 / 5%), 0 8px 24px rgb(36 36 65 / 7%);
-
-    --code-bg: #1c1c33;
-    --code-ink: #e8e8f2;
-    --code-key: #ffb266;
-    --code-str: #b7e3c0;
-
-    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
-    --font-display: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  :root{
+    --ink:#0F1B2D;
+    --ink-2:#16273D;
+    --ink-3:#1D3049;
+    --paper:#EAE6D9;
+    --paper-2:#F2EFE5;
+    --brass:#BE9349;
+    --brass-deep:#8C6425;
+    --brass-bright:#DDB86A;
+    --green:#4C9172;
+    --green-dim:#2E4A3E;
+    --red:#B2543C;
+    --text-hi:#F4F1E6;
+    --text-mid:#B9C1CE;
+    --text-dim:#7C8899;
+    --rule:rgba(244,241,230,0.14);
+    --rule-brass:rgba(190,147,73,0.4);
+    --serif:'Fraunces', serif;
+    --sans:'IBM Plex Sans', sans-serif;
+    --mono:'IBM Plex Mono', monospace;
   }
-
-  @media (prefers-color-scheme: dark) {
-    :root {
-      color-scheme: dark;
-      --canvas: #0a0a16;
-      --panel: #14142a;
-      --panel-muted: #10101f;
-      --ink: #f8fafc;
-      --ink-secondary: #d8e1ec;
-      --ink-muted: #a7b4c7;
-      --ink-subtle: #8494aa;
-      --line: rgb(148 163 184 / 18%);
-      --line-strong: rgb(148 163 184 / 30%);
-      --brand-text: #ffb84d;
-      --shadow-panel: 0 1px 2px rgb(0 0 0 / 28%), 0 12px 32px rgb(0 0 0 / 22%);
-      --code-bg: #0c0c1a;
-    }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--ink);
+    color:var(--text-hi);
+    font-family:var(--sans);
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
   }
+  body.lang-tr .en{display:none;}
+  body.lang-en .tr{display:none;}
 
-  * { box-sizing: border-box; }
+  a{color:inherit;}
+  img,svg{display:block;}
 
-  body {
-    margin: 0;
-    background: var(--canvas);
-    color: var(--ink);
-    font-family: var(--font-sans);
-    font-size: 15px;
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
+  .wrap{max-width:1080px; margin:0 auto; padding:0 32px;}
+
+  /* ---------- MASTHEAD ---------- */
+  header.masthead{
+    border-bottom:1px solid var(--rule);
+    background:linear-gradient(180deg, var(--ink) 0%, var(--ink-2) 100%);
+    position:sticky; top:0; z-index:40;
+    backdrop-filter:blur(6px);
   }
-
-  .shell { display: flex; min-height: 100vh; flex-direction: column; }
-  @media (min-width: 1024px) { .shell { flex-direction: row; } }
-
-  /* ── Marka paneli (CRM login ekranının sol paneliyle aynı dil) ──────── */
-  .brand-panel {
-    position: relative;
-    overflow: hidden;
-    background: linear-gradient(145.59deg, var(--navy-deep) 6.17%, var(--navy) 45.62%, var(--navy-lift) 93.83%);
-    color: #fff;
-    padding: 2.5rem 2rem 3rem;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 3rem;
+  .masthead-inner{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 32px;
+    max-width:1080px; margin:0 auto;
   }
-  @media (min-width: 1024px) {
-    .brand-panel {
-      flex-basis: 42%;
-      flex-shrink: 0;
-      /*
-       * `height` + `align-self` şart: yalnız `min-height` verilseydi panel, flex'in
-       * varsayılan `stretch` davranışıyla TÜM belge yüksekliğine uzardı ve
-       * `space-between` başlığı ekranın çok altına iterdi — ilk açılışta kullanıcı
-       * boş bir lacivert alan görürdü (ölçülerek bulundu).
-       */
-      height: 100vh;
-      align-self: flex-start;
-      position: sticky;
-      top: 0;
-      padding: 2.5rem 3rem 4.5rem;
-    }
+  .wordmark{display:flex; align-items:center; gap:12px;}
+  .seal{
+    width:34px; height:34px; border-radius:50%;
+    border:1.5px solid var(--brass);
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--serif); font-size:13px; color:var(--brass-bright);
+    flex-shrink:0;
   }
-  /* Grid dokusu — login panelindeki 36px'lik ızgaranın aynısı */
-  .brand-panel::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    opacity: 0.04;
+  .wordmark-text{display:flex; flex-direction:column; line-height:1.1;}
+  .wordmark-text .title{font-family:var(--serif); font-weight:620; font-size:17px; letter-spacing:0.02em;}
+  .wordmark-text .sub{font-family:var(--mono); font-size:10px; letter-spacing:0.14em; color:var(--text-dim); text-transform:uppercase; margin-top:3px;}
+
+  .masthead-right{display:flex; align-items:center; gap:18px;}
+  .status-pill{
+    display:flex; align-items:center; gap:7px;
+    font-family:var(--mono); font-size:11px; letter-spacing:0.04em;
+    color:var(--green); border:1px solid var(--green-dim);
+    background:rgba(76,145,114,0.08);
+    padding:6px 12px; border-radius:20px;
+  }
+  .status-dot{width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 0 3px rgba(76,145,114,0.25);}
+
+  .lang-toggle{
+    display:flex; border:1px solid var(--rule-brass); border-radius:20px; overflow:hidden;
+    font-family:var(--mono); font-size:11px; letter-spacing:0.06em;
+  }
+  .lang-toggle button{
+    background:transparent; border:none; color:var(--text-mid);
+    padding:6px 13px; cursor:pointer; font-family:var(--mono); font-size:11px; letter-spacing:0.06em;
+    transition:all .15s ease;
+  }
+  .lang-toggle button.active{background:var(--brass); color:var(--ink);}
+
+  /* ---------- HERO ---------- */
+  .hero{
+    padding:76px 0 64px;
+    border-bottom:1px solid var(--rule);
+    position:relative;
+    overflow:hidden;
+  }
+  .hero::before{
+    content:'';
+    position:absolute; inset:0;
     background-image:
-      linear-gradient(rgba(255,255,255,1) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,1) 1px, transparent 1px);
-    background-size: 36px 36px;
-    pointer-events: none;
+      linear-gradient(var(--rule) 1px, transparent 1px);
+    background-size:100% 42px;
+    opacity:0.35;
+    pointer-events:none;
+    mask-image:linear-gradient(180deg, transparent, black 20%, black 60%, transparent);
   }
-  /* Sol kenardaki turuncu aksan çizgisi */
-  .brand-panel::after {
-    content: "";
-    position: absolute;
-    inset-block: 0;
-    left: 0;
-    width: 4px;
-    opacity: 0.4;
-    background: linear-gradient(to bottom, transparent, var(--brand) 40%, transparent);
-    pointer-events: none;
+  .hero-inner{position:relative; z-index:2;}
+  .eyebrow{
+    font-family:var(--mono); font-size:11px; letter-spacing:0.2em; text-transform:uppercase;
+    color:var(--brass-bright); margin-bottom:22px; display:flex; align-items:center; gap:10px;
   }
-  .brand-panel > * { position: relative; }
+  .eyebrow::before{content:''; width:26px; height:1px; background:var(--brass);}
+  h1{
+    font-family:var(--serif); font-weight:520; font-size:clamp(34px,5.4vw,58px);
+    line-height:1.06; letter-spacing:-0.01em; max-width:15ch;
+    margin-bottom:26px;
+  }
+  h1 em{font-style:italic; color:var(--brass-bright); font-weight:460;}
+  .hero-sub{max-width:56ch; color:var(--text-mid); font-size:16.5px; margin-bottom:14px;}
+  .hero-sub.en{color:var(--text-dim); font-size:15px;}
+  .hero-cta{display:flex; gap:14px; margin-top:34px; flex-wrap:wrap;}
+  .btn{
+    font-family:var(--sans); font-weight:600; font-size:14px;
+    padding:13px 24px; border-radius:3px; cursor:pointer; text-decoration:none;
+    display:inline-flex; align-items:center; gap:8px; transition:all .15s ease;
+    border:1px solid transparent;
+  }
+  .btn-primary{background:var(--brass); color:var(--ink);}
+  .btn-primary:hover{background:var(--brass-bright);}
+  .btn-ghost{border:1px solid var(--rule-brass); color:var(--text-hi);}
+  .btn-ghost:hover{border-color:var(--brass); background:rgba(190,147,73,0.08);}
 
-  .mark {
-    display: inline-grid;
-    grid-template-columns: repeat(3, 11px);
-    grid-auto-rows: 11px;
-    gap: 3px;
+  /* split-flap board */
+  .board{
+    margin-top:56px;
+    border:1px solid var(--rule-brass);
+    background:var(--ink-2);
+    border-radius:4px;
+    overflow:hidden;
   }
-  .mark i { display: block; background: var(--brand); border-radius: 1px; }
-  .mark i.o60 { opacity: 0.6; }
-  .mark i.o30 { opacity: 0.3; }
-  .mark i.gap { background: transparent; }
-
-  .kicker {
-    font-family: var(--font-display);
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-    color: var(--brand);
-    margin: 0 0 0.75rem;
+  .board-head{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:10px 18px; border-bottom:1px solid var(--rule);
+    font-family:var(--mono); font-size:10.5px; letter-spacing:0.12em; text-transform:uppercase;
+    color:var(--text-dim);
   }
-  .brand-panel h1 {
-    font-family: var(--font-display);
-    font-size: 2.25rem;
-    line-height: 1.2;
-    font-weight: 800;
-    margin: 0;
-    letter-spacing: -0.015em;
+  .board-rows{display:flex; flex-direction:column;}
+  .board-row{
+    display:grid; grid-template-columns:56px 1fr auto auto; align-items:center; gap:16px;
+    padding:14px 18px; border-bottom:1px solid var(--rule);
+    font-family:var(--mono);
+    opacity:0; transform:rotateX(-90deg); transform-origin:top;
+    animation:flip .55s ease forwards;
   }
-  .brand-panel h1 .accent { color: var(--brand); }
-  .brand-panel .lede {
-    margin: 1rem 0 0;
-    max-width: 34ch;
-    font-size: 0.9rem;
-    line-height: 1.65;
-    color: rgb(255 255 255 / 50%);
+  .board-row:last-child{border-bottom:none;}
+  .board-row:nth-child(1){animation-delay:.05s;}
+  .board-row:nth-child(2){animation-delay:.18s;}
+  .board-row:nth-child(3){animation-delay:.31s;}
+  .board-row:nth-child(4){animation-delay:.44s;}
+  @keyframes flip{
+    0%{opacity:0; transform:rotateX(-90deg);}
+    60%{opacity:1;}
+    100%{opacity:1; transform:rotateX(0deg);}
   }
-  .brand-panel .lede + .lede { margin-top: 0.6rem; }
-
-  .attribution {
-    margin-top: 2rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid rgb(255 255 255 / 12%);
-    font-size: 0.8rem;
-    color: rgb(255 255 255 / 45%);
+  @media (prefers-reduced-motion:reduce){
+    .board-row{animation:none; opacity:1; transform:none;}
   }
-  .attribution strong { color: #fff; font-weight: 600; }
-
-  /* ── İçerik ────────────────────────────────────────────────────────── */
-  .content { flex: 1; min-width: 0; padding: 2.5rem 1.5rem 4rem; }
-  @media (min-width: 1024px) { .content { padding: 3.5rem 3rem 4rem; } }
-  .content-inner { max-width: 620px; margin: 0 auto; }
-
-  .card {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    box-shadow: var(--shadow-panel);
-    padding: 1.5rem 1.75rem;
-    margin-bottom: 1.25rem;
-  }
-  .card:last-child { margin-bottom: 0; }
-
-  h2 {
-    font-family: var(--font-display);
-    font-size: 1rem;
-    font-weight: 700;
-    margin: 0 0 1rem;
-    color: var(--ink);
-  }
-  p { margin: 0 0 0.75rem; color: var(--ink-secondary); }
-  p:last-child { margin-bottom: 0; }
-  .card strong { color: var(--brand-text); font-weight: 600; }
-
-  .split { display: grid; gap: 1.5rem; }
-  @media (min-width: 560px) {
-    .split { grid-template-columns: 1fr 1fr; gap: 1.75rem; }
-    .split > div + div { border-left: 1px solid var(--line); padding-left: 1.75rem; }
-  }
-  .lang {
-    display: block;
-    font-family: var(--font-display);
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 1px;
-    color: var(--ink-subtle);
-    margin-bottom: 0.6rem;
+  .board-code{font-size:13px; font-weight:600; color:var(--brass-bright); letter-spacing:0.04em;}
+  .board-name{font-family:var(--sans); font-size:13.5px; color:var(--text-mid);}
+  .board-rate{font-size:16px; font-weight:600; color:var(--text-hi);}
+  .board-unit{font-size:11px; color:var(--text-dim);}
+  .board-foot{
+    padding:10px 18px; font-family:var(--mono); font-size:10.5px; color:var(--text-dim);
+    border-top:1px solid var(--rule);
   }
 
-  code, pre {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.8125rem;
+  /* ---------- SECTIONS shared ---------- */
+  section{padding:72px 0;}
+  section.divider{border-bottom:1px solid var(--rule);}
+  .section-head{margin-bottom:40px; max-width:64ch;}
+  .kicker{
+    font-family:var(--mono); font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--brass); margin-bottom:14px;
   }
-  p code, td code {
-    background: var(--panel-muted);
-    border: 1px solid var(--line);
-    color: var(--brand-text);
-    padding: 0.05rem 0.35rem;
-    border-radius: 6px;
-  }
-  pre {
-    background: var(--code-bg);
-    color: var(--code-ink);
-    padding: 1rem 1.1rem;
-    border-radius: 12px;
-    overflow-x: auto;
-    margin: 0;
-    line-height: 1.65;
-  }
-  pre .key { color: var(--code-key); }
-  pre .str { color: var(--code-str); }
-  pre .cm { color: rgb(232 232 242 / 45%); }
+  h2{font-family:var(--serif); font-weight:560; font-size:clamp(24px,3vw,32px); margin-bottom:12px; letter-spacing:-0.01em;}
+  .lede{color:var(--text-mid); font-size:15.5px; max-width:60ch;}
 
-  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 1rem; }
-  th, td { text-align: left; padding: 0.6rem 0.7rem; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th {
-    font-family: var(--font-display);
-    color: var(--ink-subtle);
-    font-weight: 600;
-    white-space: nowrap;
-    font-size: 0.8rem;
+  /* ledger two-column */
+  .ledger{
+    display:grid; grid-template-columns:1fr 1fr; gap:0;
+    border:1px solid var(--rule-brass); border-radius:4px; overflow:hidden;
   }
-  td { color: var(--ink-secondary); }
-  tr:last-child th, tr:last-child td { border-bottom: none; }
-
-  .status {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--ink-muted);
-    margin-bottom: 1rem;
-  }
-  .status .dot {
-    width: 7px; height: 7px; border-radius: 999px;
-    background: #047857;
-    box-shadow: 0 0 0 3px rgb(4 120 87 / 15%);
+  .ledger > div{padding:26px 28px; font-size:14.5px; color:var(--text-mid);}
+  .ledger > div:first-child{border-right:1px solid var(--rule); background:var(--ink-2);}
+  .ledger-label{font-family:var(--mono); font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--brass-bright); margin-bottom:10px; display:block;}
+  @media (max-width:720px){
+    .ledger{grid-template-columns:1fr;}
+    .ledger > div:first-child{border-right:none; border-bottom:1px solid var(--rule);}
   }
 
-  footer {
-    margin-top: 2rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--line);
-    font-size: 0.8rem;
-    color: var(--ink-subtle);
+  /* ---------- INTEGRATION / STAMPS ---------- */
+  .stamp-row{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:22px;}
+  .stamp{
+    font-family:var(--mono); font-size:12px; letter-spacing:0.06em;
+    border:1.5px dashed var(--rule-brass); border-radius:3px;
+    padding:9px 16px; color:var(--text-mid); background:transparent;
+    cursor:pointer; transition:all .15s ease; transform:rotate(var(--r,0deg));
   }
+  .stamp:nth-child(1){--r:-1.2deg;} .stamp:nth-child(2){--r:0.8deg;} .stamp:nth-child(3){--r:-0.6deg;}
+  .stamp:nth-child(4){--r:1.1deg;} .stamp:nth-child(5){--r:-0.9deg;} .stamp:nth-child(6){--r:0.5deg;} .stamp:nth-child(7){--r:-0.4deg;}
+  .stamp.active{
+    border-style:solid; border-color:var(--brass); color:var(--brass-bright);
+    background:rgba(190,147,73,0.1); transform:rotate(0deg);
+  }
+  .code-panel{
+    background:#0B141F; border:1px solid var(--rule); border-radius:4px;
+    overflow:hidden;
+  }
+  .code-panel-head{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:10px 18px; border-bottom:1px solid var(--rule);
+    font-family:var(--mono); font-size:10.5px; color:var(--text-dim); letter-spacing:0.08em;
+  }
+  .code-panel pre{
+    padding:22px; overflow-x:auto; font-family:var(--mono); font-size:13px; line-height:1.65;
+    color:#DCE3EC;
+  }
+  .code-block{display:none;}
+  .code-block.active{display:block;}
+  .tok-kw{color:#DDB86A;} .tok-str{color:#8FBFA0;} .tok-com{color:#5C6B7D; font-style:italic;} .tok-fn{color:#8FB8D9;}
+
+  /* clauses / madde list */
+  .clauses{counter-reset:madde; margin-top:36px; display:flex; flex-direction:column; gap:0;}
+  .clause{
+    counter-increment:madde; display:grid; grid-template-columns:64px 1fr; gap:20px;
+    padding:22px 0; border-top:1px solid var(--rule);
+  }
+  .clause:last-child{border-bottom:1px solid var(--rule);}
+  .clause::before{
+    content:"0" counter(madde);
+    font-family:var(--serif); font-size:26px; color:var(--brass); font-weight:460;
+  }
+  .clause h3{font-family:var(--sans); font-size:15.5px; font-weight:600; margin-bottom:6px;}
+  .clause p{color:var(--text-mid); font-size:14.5px; max-width:62ch;}
+  .clause code{font-family:var(--mono); font-size:12.5px; background:rgba(190,147,73,0.12); color:var(--brass-bright); padding:2px 6px; border-radius:2px;}
+
+  /* response contract */
+  .contract{
+    display:grid; grid-template-columns:1.1fr 0.9fr; gap:28px;
+  }
+  @media (max-width:820px){.contract{grid-template-columns:1fr;}}
+  .contract pre{
+    background:#0B141F; border:1px solid var(--rule); border-radius:4px; padding:22px;
+    font-family:var(--mono); font-size:13px; line-height:1.7; color:#DCE3EC; overflow-x:auto;
+  }
+  .annot{display:flex; flex-direction:column; gap:16px;}
+  .annot-item{border-left:2px solid var(--brass); padding:4px 0 4px 16px;}
+  .annot-item .k{font-family:var(--mono); font-size:12.5px; color:var(--brass-bright); display:block; margin-bottom:4px;}
+  .annot-item .d{font-size:13.5px; color:var(--text-mid);}
+
+  /* status table */
+  table.board-table{width:100%; border-collapse:collapse; font-size:14px;}
+  table.board-table th{
+    text-align:left; font-family:var(--mono); font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase;
+    color:var(--text-dim); padding:10px 14px; border-bottom:1px solid var(--rule-brass);
+  }
+  table.board-table td{padding:14px; border-bottom:1px solid var(--rule); color:var(--text-mid);}
+  .chip{
+    font-family:var(--mono); font-size:12px; font-weight:600; padding:3px 10px; border-radius:20px;
+    display:inline-block;
+  }
+  .chip-200{background:rgba(76,145,114,0.15); color:var(--green);}
+  .chip-401{background:rgba(190,147,73,0.15); color:var(--brass-bright);}
+  .chip-429{background:rgba(178,84,60,0.15); color:#D08061;}
+  .chip-503{background:rgba(178,84,60,0.22); color:#E08A6C;}
+
+  /* footer */
+  footer{padding:56px 0 64px;}
+  .footer-inner{display:flex; justify-content:space-between; align-items:flex-start; gap:40px; flex-wrap:wrap;}
+  .footer-note{color:var(--text-dim); font-size:13px; max-width:44ch; line-height:1.7;}
+  .footer-note strong{color:var(--text-mid);}
+  .footer-seal{display:flex; align-items:center; gap:12px;}
+
+  ::selection{background:var(--brass); color:var(--ink);}
+  :focus-visible{outline:2px solid var(--brass-bright); outline-offset:2px;}
 </style>
 </head>
-<body>
+<body class="lang-tr">
 
-<div class="shell">
-
-  <aside class="brand-panel">
-    <span class="mark" aria-hidden="true">
-      <i class="gap"></i><i class="o60"></i><i></i>
-      <i class="gap"></i><i class="o60"></i><i></i>
-      <i class="o30"></i><i class="o60"></i><i></i>
-    </span>
-
-    <div>
-      <p class="kicker">Kur Servisi · Exchange Rate API</p>
-      <h1>Merkez Bankası kuru,<br /><span class="accent">tek bir uçtan.</span></h1>
-      <p class="lede">
-        TR: TCMB'nin resmî günlük kurlarını normalize eder, önbelleğe alır ve anahtar
-        korumalı tek bir JSON sözleşmesiyle sunar.
-      </p>
-      <p class="lede">
-        EN: Normalises TCMB's official daily rates and serves them through a single,
-        cached, key-protected JSON contract.
-      </p>
-      <p class="attribution">
-        <strong>Etiya Telekom Lite</strong> projesi için geliştirilmiş bağımsız mikroservis<br />
-        An independent microservice built for the Etiya Telekom Lite project
-      </p>
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="wordmark">
+      <div class="seal">KS</div>
+      <div class="wordmark-text">
+        <span class="title">Kur Servisi</span>
+        <span class="sub">TCMB Exchange Bulletin API</span>
+      </div>
     </div>
-  </aside>
+    <div class="masthead-right">
+      <div class="status-pill"><span class="status-dot"></span><span class="tr">Servis Çalışıyor</span><span class="en">Operational</span></div>
+      <div class="lang-toggle">
+        <button id="btn-tr" class="active">TR</button>
+        <button id="btn-en">EN</button>
+      </div>
+    </div>
+  </div>
+</header>
 
-  <main class="content">
-    <div class="content-inner">
+<section class="hero divider">
+  <div class="wrap hero-inner">
+    <div class="eyebrow"><span class="tr">Etiya Telekom Lite · Bağımsız Mikroservis</span><span class="en">Etiya Telekom Lite · Independent Microservice</span></div>
+    <h1 class="tr">Merkez Bankası kuru,<br>tek bir <em>uçtan</em>.</h1>
+    <h1 class="en">The central bank's rate,<br>from a single <em>endpoint</em>.</h1>
+    <p class="hero-sub tr">TCMB'nin resmî günlük kur bültenini çeker, 15 dakikalık tazelik penceresiyle önbelleğe alır ve anahtar korumalı tek bir JSON sözleşmesiyle sunar. Hangi dilde yazıyor olursanız olun — aynı sözleşme, aynı davranış.</p>
+    <p class="hero-sub en">Fetches TCMB's official daily bulletin, caches it within a 15-minute freshness window, and serves it through a single, key-protected JSON contract. Whatever language you write in, the contract behaves the same.</p>
+    <div class="hero-cta">
+      <a href="#entegrasyon" class="btn btn-primary"><span class="tr">Entegrasyona başla</span><span class="en">Start integrating</span></a>
+      <a href="#sozlesme" class="btn btn-ghost"><span class="tr">JSON sözleşmesini gör</span><span class="en">View the JSON contract</span></a>
+    </div>
 
-      <p class="status"><span class="dot"></span> Servis çalışıyor / Operational</p>
-
-      <section class="card">
-        <h2>Genel bakış / Overview</h2>
-        <div class="split">
-          <div>
-            <span class="lang">TR</span>
-            <p>
-              TCMB'nin günlük döviz kuru belgesi çekilir, 15 dakikalık tazelik penceresiyle
-              önbelleğe alınır ve kendi JSON sözleşmemizle sunulur. Kurlar TCMB'nin o günkü
-              <strong>resmî yayınıdır</strong> — anlık piyasa kuru değildir.
-            </p>
-            <p>Erişim için API anahtarı gerekir; anahtarınız yoksa servisi size verenle iletişime geçin.</p>
-          </div>
-          <div>
-            <span class="lang">EN</span>
-            <p>
-              Fetches TCMB's daily bulletin, caches it within a 15-minute freshness window and
-              serves it through our own JSON contract. Rates reflect TCMB's
-              <strong>official daily publication</strong> — not a live market feed.
-            </p>
-            <p>An API key is required. If you don't have one, contact whoever gave you this address.</p>
-          </div>
+    <div class="board">
+      <div class="board-head">
+        <span class="tr">TCMB Bülteni · Canlı</span><span class="en">TCMB Bulletin · Live</span>
+        <span id="board-date">—</span>
+      </div>
+      <div class="board-rows" id="board-rows">
+        <div class="board-row" data-code="USD">
+          <span class="board-code">USD</span>
+          <span class="board-name tr">Amerikan Doları</span><span class="board-name en">US Dollar</span>
+          <span class="board-rate">—</span>
+          <span class="board-unit tr">TRY / birim</span><span class="board-unit en">TRY / unit</span>
         </div>
-      </section>
+        <div class="board-row" data-code="EUR">
+          <span class="board-code">EUR</span>
+          <span class="board-name tr">Euro</span><span class="board-name en">Euro</span>
+          <span class="board-rate">—</span>
+          <span class="board-unit tr">TRY / birim</span><span class="board-unit en">TRY / unit</span>
+        </div>
+        <div class="board-row" data-code="GBP">
+          <span class="board-code">GBP</span>
+          <span class="board-name tr">İngiliz Sterlini</span><span class="board-name en">British Pound</span>
+          <span class="board-rate">—</span>
+          <span class="board-unit tr">TRY / birim</span><span class="board-unit en">TRY / unit</span>
+        </div>
+        <div class="board-row" data-code="JPY">
+          <span class="board-code">JPY</span>
+          <span class="board-name tr">Japon Yeni</span><span class="board-name en">Japanese Yen</span>
+          <span class="board-rate">—</span>
+          <span class="board-unit tr">TRY / birim</span><span class="board-unit en">TRY / unit</span>
+        </div>
+      </div>
+      <div class="board-foot tr">Servisin kendi ucundan canlı okunur. TCMB'nin o günkü resmî yayınıdır — anlık piyasa kuru değildir.</div>
+      <div class="board-foot en">Read live from the service's own endpoint. TCMB's official daily publication — not a live market feed.</div>
+    </div>
+  </div>
+</section>
 
-      <section class="card">
-        <h2>İstek / Request</h2>
-        <pre>curl "https://kur.etiyapi.com/api/v1/rates?symbols=USD,EUR" \
-  -H "<span class="key">X-API-Key</span>: <span class="str">&lt;anahtarınız / your key&gt;</span>"</pre>
-        <table>
-          <tr>
-            <th>symbols</th>
-            <td>Opsiyonel. Verilmezse tüm kurlar döner. / Optional — omit to receive every supported currency.</td>
-          </tr>
-        </table>
-      </section>
+<section class="divider">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker tr">Genel Bakış</div>
+      <div class="kicker en">Overview</div>
+      <h2 class="tr">Ne yapar, ne yapmaz</h2>
+      <h2 class="en">What it does, and doesn't do</h2>
+    </div>
+    <div class="ledger">
+      <div>
+        <span class="ledger-label tr">Servis</span>
+        <span class="ledger-label en">Service</span>
+        <p class="tr">TCMB'nin günlük döviz kuru belgesi çekilir, 15 dakikalık tazelik penceresiyle önbelleğe alınır ve kendi JSON sözleşmemizle sunulur. Amaç; her istemcinin TCMB'nin XML formatını tek başına ayrıştırmak zorunda kalmadan, öngörülebilir tek bir kaynaktan okuması.</p>
+        <p class="en">TCMB's daily exchange rate bulletin is fetched, cached within a 15-minute freshness window, and served through our own JSON contract — so no client has to parse TCMB's raw XML on its own.</p>
+      </div>
+      <div>
+        <span class="ledger-label tr">Sınır</span>
+        <span class="ledger-label en">Boundary</span>
+        <p class="tr">Kurlar TCMB'nin o günkü <strong>resmî yayınıdır</strong> — anlık piyasa kuru değildir. Bu servis TCMB'ye ait değildir; TCMB'nin herkese açık verisini tüketen bağımsız bir mikroservistir. Erişim için bir API anahtarı gerekir; anahtarınız yoksa servisi size sağlayan ekiple iletişime geçin.</p>
+        <p class="en">Rates reflect TCMB's <strong>official daily publication</strong> — not a live market feed. This service is not affiliated with TCMB; it is an independent microservice consuming TCMB's public data. An API key is required; if you don't have one, contact whoever provisioned the service for you.</p>
+      </div>
+    </div>
+  </div>
+</section>
 
-      <section class="card">
-        <h2>Cevap / Response</h2>
-        <pre>{
-  "<span class="key">base</span>": <span class="str">"TRY"</span>,
-  "<span class="key">rateDate</span>": <span class="str">"2026-08-12"</span>,   <span class="cm">// TCMB yayın günü / publication date</span>
-  "<span class="key">rates</span>": [
-    { "currency": <span class="str">"USD"</span>, "rate": 0.0209, "unitPrice": 47.73 }
+<section class="divider" id="entegrasyon">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker tr">Entegrasyon</div>
+      <div class="kicker en">Integration</div>
+      <h2 class="tr">Dil fark etmez, sözleşme aynı</h2>
+      <h2 class="en">Any language, the same contract</h2>
+      <p class="lede tr">Aşağıdaki her sekme aynı isteği farklı bir yazılım dilinde gösterir. Servisi kendi dilinizde tüketmek için tek ihtiyacınız olan: taban adres, <code style="font-family:var(--mono); color:var(--brass-bright);">X-API-Key</code> başlığı ve JSON gövdesini okuyan bir istemci.</p>
+      <p class="lede en">Each tab below shows the same request in a different language. To consume the service from your own stack, all you need is the base URL, the <code style="font-family:var(--mono); color:var(--brass-bright);">X-API-Key</code> header, and a client that reads JSON.</p>
+    </div>
+
+    <div class="stamp-row" id="stamp-row">
+      <button class="stamp active" data-lang="curl">cURL</button>
+      <button class="stamp" data-lang="js">JavaScript</button>
+      <button class="stamp" data-lang="python">Python</button>
+      <button class="stamp" data-lang="php">PHP</button>
+      <button class="stamp" data-lang="java">Java</button>
+      <button class="stamp" data-lang="csharp">C# / .NET</button>
+      <button class="stamp" data-lang="go">Go</button>
+    </div>
+
+    <div class="code-panel">
+      <div class="code-panel-head">
+        <span id="panel-title">request.sh</span>
+        <span class="tr">GET /api/v1/rates</span><span class="en">GET /api/v1/rates</span>
+      </div>
+
+      <div class="code-block active" data-lang="curl"><pre><span class="tok-com"># cURL</span>
+curl <span class="tok-str">"https://kur.etiyapi.com/api/v1/rates?symbols=USD,EUR"</span> \
+  -H <span class="tok-str">"X-API-Key: &lt;anahtarınız&gt;"</span></pre></div>
+
+      <div class="code-block" data-lang="js"><pre><span class="tok-com">// JavaScript — fetch</span>
+<span class="tok-kw">const</span> res = <span class="tok-kw">await</span> <span class="tok-fn">fetch</span>(
+  <span class="tok-str">"https://kur.etiyapi.com/api/v1/rates?symbols=USD,EUR"</span>,
+  { headers: { <span class="tok-str">"X-API-Key"</span>: apiKey } }
+);
+<span class="tok-kw">const</span> { rates } = <span class="tok-kw">await</span> res.<span class="tok-fn">json</span>();</pre></div>
+
+      <div class="code-block" data-lang="python"><pre><span class="tok-com"># Python — requests</span>
+<span class="tok-kw">import</span> requests
+
+res = requests.<span class="tok-fn">get</span>(
+    <span class="tok-str">"https://kur.etiyapi.com/api/v1/rates"</span>,
+    params={<span class="tok-str">"symbols"</span>: <span class="tok-str">"USD,EUR"</span>},
+    headers={<span class="tok-str">"X-API-Key"</span>: api_key},
+)
+rates = res.json()[<span class="tok-str">"rates"</span>]</pre></div>
+
+      <div class="code-block" data-lang="php"><pre><span class="tok-com">// PHP — cURL</span>
+$ch = <span class="tok-fn">curl_init</span>(<span class="tok-str">"https://kur.etiyapi.com/api/v1/rates?symbols=USD,EUR"</span>);
+<span class="tok-fn">curl_setopt</span>($ch, CURLOPT_HTTPHEADER, [<span class="tok-str">"X-API-Key: {$apiKey}"</span>]);
+<span class="tok-fn">curl_setopt</span>($ch, CURLOPT_RETURNTRANSFER, <span class="tok-kw">true</span>);
+$rates = <span class="tok-fn">json_decode</span>(<span class="tok-fn">curl_exec</span>($ch), <span class="tok-kw">true</span>)[<span class="tok-str">"rates"</span>];</pre></div>
+
+      <div class="code-block" data-lang="java"><pre><span class="tok-com">// Java — HttpClient</span>
+HttpRequest req = HttpRequest.<span class="tok-fn">newBuilder</span>()
+    .<span class="tok-fn">uri</span>(URI.<span class="tok-fn">create</span>(<span class="tok-str">"https://kur.etiyapi.com/api/v1/rates?symbols=USD,EUR"</span>))
+    .<span class="tok-fn">header</span>(<span class="tok-str">"X-API-Key"</span>, apiKey)
+    .<span class="tok-fn">build</span>();
+HttpResponse&lt;String&gt; res = client.<span class="tok-fn">send</span>(req, BodyHandlers.<span class="tok-fn">ofString</span>());</pre></div>
+
+      <div class="code-block" data-lang="csharp"><pre><span class="tok-com">// C# — HttpClient</span>
+<span class="tok-kw">var</span> req = <span class="tok-kw">new</span> HttpRequestMessage(HttpMethod.Get,
+    <span class="tok-str">"https://kur.etiyapi.com/api/v1/rates?symbols=USD,EUR"</span>);
+req.Headers.<span class="tok-fn">Add</span>(<span class="tok-str">"X-API-Key"</span>, apiKey);
+<span class="tok-kw">var</span> res = <span class="tok-kw">await</span> client.<span class="tok-fn">SendAsync</span>(req);</pre></div>
+
+      <div class="code-block" data-lang="go"><pre><span class="tok-com">// Go — net/http</span>
+req, _ := http.<span class="tok-fn">NewRequest</span>(<span class="tok-str">"GET"</span>,
+    <span class="tok-str">"https://kur.etiyapi.com/api/v1/rates?symbols=USD,EUR"</span>, <span class="tok-kw">nil</span>)
+req.Header.<span class="tok-fn">Set</span>(<span class="tok-str">"X-API-Key"</span>, apiKey)
+res, _ := client.<span class="tok-fn">Do</span>(req)</pre></div>
+    </div>
+
+    <div class="clauses">
+      <div class="clause">
+        <div>
+          <h3 class="tr">Sözleşmeyi sabit tutun</h3>
+          <h3 class="en">Keep the contract fixed</h3>
+          <p class="tr">Hangi dili kullanırsanız kullanın, uç nokta ve yanıt şeması aynıdır. Yeni bir dil için istemci yazarken TCMB'nin ham XML'ini değil, yalnızca bu servisin JSON'unu hedefleyin.</p>
+          <p class="en">The endpoint and response schema stay identical regardless of language. When writing a client in a new language, target this service's JSON — never TCMB's raw XML.</p>
+        </div>
+      </div>
+      <div class="clause">
+        <div>
+          <h3 class="tr">Anahtarı başlıkta taşıyın</h3>
+          <h3 class="en">Carry the key in the header</h3>
+          <p class="tr">Kimlik doğrulama tek bir başlıkla yapılır: <code>X-API-Key</code>. Anahtarı sorgu dizesine, log satırına ya da istemci koduna gömmeyin.</p>
+          <p class="en">Authentication is a single header: <code>X-API-Key</code>. Never embed it in the query string, log lines, or client-side code.</p>
+        </div>
+      </div>
+      <div class="clause">
+        <div>
+          <h3 class="tr">429 ve 503'ü ayırt edin</h3>
+          <h3 class="en">Distinguish 429 from 503</h3>
+          <p class="tr">Yeni bir dil desteği eklerken istemcinizin <code>429</code> (kota) durumunda <code>Retry-After</code> başlığını okumasını, <code>503</code> (kur yok) durumunda ise farklı davranmasını sağlayın.</p>
+          <p class="en">When adding support for a new language, make sure your client reads the <code>Retry-After</code> header on <code>429</code> (quota) and handles <code>503</code> (no rate available) differently.</p>
+        </div>
+      </div>
+      <div class="clause">
+        <div>
+          <h3 class="tr">Listede olmayan bir dil mi kullanıyorsunuz?</h3>
+          <h3 class="en">Using a language that isn't listed?</h3>
+          <p class="tr">Yukarıdaki istekleri temel alan ince bir sarmalayıcı yazmanız yeterli: taban adresi, <code>X-API-Key</code> başlığını ve <code>rates</code> dizisini okuyan birkaç satır kod, kendi dilinizde tam bir istemci için yeterlidir.</p>
+          <p class="en">A thin wrapper around the request above is all it takes: a few lines that set the base URL, attach the <code>X-API-Key</code> header, and read the <code>rates</code> array give you a complete client in your own language.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="divider" id="sozlesme">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker tr">Yanıt Sözleşmesi</div>
+      <div class="kicker en">Response Contract</div>
+      <h2 class="tr">Cevap</h2>
+      <h2 class="en">Response</h2>
+    </div>
+    <div class="contract">
+      <pre>{
+  <span class="tok-str">"base"</span>: <span class="tok-str">"TRY"</span>,
+  <span class="tok-str">"rateDate"</span>: <span class="tok-str">"2026-08-12"</span>,
+  <span class="tok-str">"rates"</span>: [
+    {
+      <span class="tok-str">"currency"</span>: <span class="tok-str">"USD"</span>,
+      <span class="tok-str">"rate"</span>: 0.0209,
+      <span class="tok-str">"unitPrice"</span>: 47.73
+    }
   ]
 }</pre>
-        <table>
-          <tr>
-            <th>rate</th>
-            <td>1 TRY kaç birim eder / how much 1 TRY is worth in that currency</td>
-          </tr>
-          <tr>
-            <th>unitPrice</th>
-            <td>1 birim kaç TRY eder / how much one unit is worth in TRY</td>
-          </tr>
-        </table>
-      </section>
-
-      <section class="card">
-        <h2>Kota / Rate limit</h2>
-        <div class="split">
-          <div>
-            <span class="lang">TR</span>
-            <p>
-              Her anahtarın dakika başına istek sınırı vardır. Aşıldığında <code>429</code> ve
-              ne zaman tekrar denenebileceğini söyleyen <code>Retry-After</code> döner.
-            </p>
-          </div>
-          <div>
-            <span class="lang">EN</span>
-            <p>
-              Each key carries a per-minute request limit. Exceeding it returns <code>429</code>
-              together with a <code>Retry-After</code> header telling you when to retry.
-            </p>
-          </div>
+      <div class="annot">
+        <div class="annot-item">
+          <span class="k">rateDate</span>
+          <span class="d tr">TCMB'nin bültenle yayınladığı gün — isteğin yapıldığı an değil.</span>
+          <span class="d en">The day TCMB published the bulletin — not the moment of the request.</span>
         </div>
-        <table>
-          <tr><th>200</th><td>Kur döndü / rates returned</td></tr>
-          <tr><th>401</th><td>Anahtar yok ya da tanınmıyor / missing or unknown key</td></tr>
-          <tr><th>429</th><td>Kota aşıldı / rate limit exceeded</td></tr>
-          <tr><th>503</th><td>Elde hiç kur yok / no rate available at all</td></tr>
-        </table>
-      </section>
-
-      <footer>currency-api · TCMB kur servisi / TCMB exchange rate service</footer>
-
+        <div class="annot-item">
+          <span class="k">rate</span>
+          <span class="d tr">1 TRY'nin o para biriminden kaç birime denk geldiği.</span>
+          <span class="d en">How much 1 TRY is worth in that currency.</span>
+        </div>
+        <div class="annot-item">
+          <span class="k">unitPrice</span>
+          <span class="d tr">1 birimin kaç TRY ettiği — panolarda gösterilen değer budur.</span>
+          <span class="d en">How much one unit is worth in TRY — this is the value shown on the board above.</span>
+        </div>
+      </div>
     </div>
-  </main>
+  </div>
+</section>
 
-</div>
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker tr">Kota &amp; Durum Kodları</div>
+      <div class="kicker en">Rate Limit &amp; Status Codes</div>
+      <h2 class="tr">Sınırlar açık olsun</h2>
+      <h2 class="en">Know the limits up front</h2>
+      <p class="lede tr">Her anahtarın dakika başına istek sınırı vardır. Aşıldığında <code style="font-family:var(--mono); color:var(--brass-bright);">429</code> ve ne zaman tekrar denenebileceğini söyleyen bir <code style="font-family:var(--mono); color:var(--brass-bright);">Retry-After</code> döner.</p>
+      <p class="lede en">Each key carries a per-minute request limit. Exceeding it returns <code style="font-family:var(--mono); color:var(--brass-bright);">429</code> together with a <code style="font-family:var(--mono); color:var(--brass-bright);">Retry-After</code> header telling you when to retry.</p>
+    </div>
+    <table class="board-table">
+      <thead>
+        <tr>
+          <th><span class="tr">Kod</span><span class="en">Code</span></th>
+          <th><span class="tr">Anlamı</span><span class="en">Meaning</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="chip chip-200">200</span></td><td><span class="tr">Kur döndü</span><span class="en">Rates returned</span></td></tr>
+        <tr><td><span class="chip chip-401">401</span></td><td><span class="tr">Anahtar yok ya da tanınmıyor</span><span class="en">Missing or unknown key</span></td></tr>
+        <tr><td><span class="chip chip-429">429</span></td><td><span class="tr">Kota aşıldı</span><span class="en">Rate limit exceeded</span></td></tr>
+        <tr><td><span class="chip chip-503">503</span></td><td><span class="tr">Elde hiç kur yok</span><span class="en">No rate available at all</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap footer-inner">
+    <div class="footer-seal">
+      <div class="seal">KS</div>
+      <div class="footer-note">
+        <strong>currency-api</strong>
+        <span class="tr"> · TCMB kur servisi. <em>Etiya Telekom Lite</em> projesi için geliştirilmiş bağımsız bir mikroservistir. TCMB ile bağlantılı değildir.</span>
+        <span class="en"> · TCMB exchange rate service. An independent microservice built for the <em>Etiya Telekom Lite</em> project. Not affiliated with TCMB.</span>
+      </div>
+    </div>
+    <div class="footer-note tr">Sorularınız için servisi size sağlayan ekiple iletişime geçebilirsiniz.</div>
+    <div class="footer-note en">For questions, contact the team that provisioned this service for you.</div>
+  </div>
+</footer>
+
+<script>
+  const btnTr = document.getElementById('btn-tr');
+  const btnEn = document.getElementById('btn-en');
+  btnTr.addEventListener('click', () => {
+    document.body.className = 'lang-tr';
+    document.documentElement.lang = 'tr';
+    btnTr.classList.add('active'); btnEn.classList.remove('active');
+  });
+  btnEn.addEventListener('click', () => {
+    document.body.className = 'lang-en';
+    document.documentElement.lang = 'en';
+    btnEn.classList.add('active'); btnTr.classList.remove('active');
+  });
+
+  /*
+   * Pano, servisin KENDİ önizleme ucundan beslenir (/api/v1/rates/preview) — anahtar istemez,
+   * çünkü sayfaya anahtar gömmek onu yakmak olurdu. Sabit yazılmış sayılar bir kur servisinin
+   * vitrininde eskiyip yanlışa döner; bu yüzden gerçek veri okunur.
+   */
+  (async () => {
+    const dateEl = document.getElementById('board-date');
+    try {
+      const res = await fetch('/api/v1/rates/preview', { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) throw new Error('preview ' + res.status);
+      const data = await res.json();
+
+      const nf = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+      for (const row of data.rates) {
+        const el = document.querySelector(`.board-row[data-code="${row.currency}"] .board-rate`);
+        if (el) el.textContent = nf.format(row.unitPrice);
+      }
+
+      if (data.rateDate) {
+        const [y, m, d] = data.rateDate.split('-');
+        dateEl.textContent = `${d}.${m}.${y}`;
+      }
+    } catch {
+      // Kur alınamadıysa SAYI UYDURMA: pano boş kalır ve durum açıkça yazılır.
+      dateEl.textContent = document.body.classList.contains('lang-en')
+        ? 'unavailable' : 'kur alınamadı';
+    }
+  })();
+
+  const stamps = document.querySelectorAll('.stamp');
+  const blocks = document.querySelectorAll('.code-block');
+  const panelTitle = document.getElementById('panel-title');
+  const fileNames = {
+    curl:'request.sh', js:'request.js', python:'request.py', php:'request.php',
+    java:'Request.java', csharp:'Request.cs', go:'request.go'
+  };
+  stamps.forEach(stamp => {
+    stamp.addEventListener('click', () => {
+      stamps.forEach(s => s.classList.remove('active'));
+      stamp.classList.add('active');
+      const lang = stamp.dataset.lang;
+      blocks.forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+      panelTitle.textContent = fileNames[lang];
+    });
+  });
+</script>
 
 </body>
 </html>
