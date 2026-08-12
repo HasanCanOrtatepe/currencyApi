@@ -138,6 +138,17 @@ class ApiGuardFilterTest {
         assertThat(filter.shouldNotFilter(health)).isTrue();
     }
 
+    /** Kök yol tanıtım sayfasıdır (static/index.html), veri döndürmez — anahtar istemesin. */
+    @Test
+    @DisplayName("/ (tanıtım sayfası) anahtar istemez")
+    void rootPathIsExempt() {
+        MockHttpServletRequest root = new MockHttpServletRequest("GET", "/");
+        MockHttpServletRequest indexHtml = new MockHttpServletRequest("GET", "/index.html");
+
+        assertThat(filter.shouldNotFilter(root)).isTrue();
+        assertThat(filter.shouldNotFilter(indexHtml)).isTrue();
+    }
+
     @Test
     @DisplayName("Kimlik doğrulama kapalıyken anahtarsız istek geçer (sınır yine uygulanır)")
     void authDisabledAllowsAnonymous() throws Exception {

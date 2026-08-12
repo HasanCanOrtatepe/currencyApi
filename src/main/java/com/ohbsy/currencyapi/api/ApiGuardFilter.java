@@ -54,11 +54,17 @@ public class ApiGuardFilter extends OncePerRequestFilter {
      * Sağlık/metrik uçları, simülatörün kaos uçları ve admin yüzeyi kapıların dışındadır.
      * Admin trafiği kendi filtre zincirine ({@code AdminAuthFilter}) sahiptir ve bir "tüketici"
      * değildir — hız sınırına tabi tutulması ya da consumer anahtarı istenmesi anlamsızdır.
+     *
+     * <p>Kök yol ({@code /}) da muaftır: {@code static/index.html} orada servis tanıtımını
+     * (anahtar YOK iken) gösterir — domaine direkt giren biri anahtar istemeden önce servisin
+     * ne olduğunu görebilmelidir. Bu sayfa hiçbir veri döndürmez, yalnız bilgilendirme metnidir.
      */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.startsWith("/actuator") || path.startsWith("/__") || path.startsWith("/admin");
+        return path.equals("/") || path.equals("/index.html")
+                || path.startsWith("/actuator") || path.startsWith("/__")
+                || path.startsWith("/admin");
     }
 
     @Override

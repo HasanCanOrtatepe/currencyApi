@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>currency-api — TCMB Kur Servisi / TRY Exchange Rate API</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --text: #111827;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --code-bg: #f3f4f6;
+    --accent: #2563eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --card: #1a1d24;
+      --text: #f3f4f6;
+      --muted: #9ca3af;
+      --border: #2a2e37;
+      --code-bg: #11141a;
+      --accent: #60a5fa;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.55;
+  }
+  .wrap {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 3rem 1.25rem 4rem;
+  }
+  h1 {
+    font-size: 1.5rem;
+    margin: 0 0 0.25rem;
+  }
+  .subtitle {
+    color: var(--muted);
+    margin: 0 0 2rem;
+    font-size: 0.95rem;
+  }
+  .lang-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    padding: 0.1rem 0.6rem;
+    margin-bottom: 0.75rem;
+  }
+  section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+  h2 {
+    font-size: 1rem;
+    margin: 0 0 0.6rem;
+  }
+  p { margin: 0 0 0.75rem; }
+  p:last-child { margin-bottom: 0; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+  }
+  code {
+    background: var(--code-bg);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 0.9rem 1rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 0.5rem 0 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.4rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--muted); font-weight: 600; }
+  footer {
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+    margin-top: 2rem;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>currency-api</h1>
+  <p class="subtitle">
+    TCMB (Türkiye Cumhuriyet Merkez Bankası) tabanlı döviz kuru servisi.
+    TRY exchange rate API, backed by Türkiye's Central Bank (TCMB).
+  </p>
+
+  <section>
+    <span class="lang-badge">TR</span>
+    <h2>Bu servis ne yapar?</h2>
+    <p>
+      TCMB'nin günlük döviz kuru belgesini çeker, 15 dakikalık bir tazelik penceresiyle
+      cache'ler ve kendi JSON sözleşmesiyle sunar. Kurlar TCMB'nin o günkü resmî yayınıdır —
+      anlık piyasa kuru değil, en fazla 15 dakika gecikmeli TCMB verisidir.
+    </p>
+    <p>Erişim için bir <strong>API anahtarı</strong> gerekir. Anahtarınız yoksa servisi size verenle iletişime geçin.</p>
+  </section>
+
+  <section>
+    <span class="lang-badge">EN</span>
+    <h2>What is this?</h2>
+    <p>
+      A TRY exchange rate API backed by TCMB (Central Bank of the Republic of Türkiye)'s
+      daily published rates. Rates are cached for up to 15 minutes — this reflects TCMB's
+      official daily publication, not a live market feed.
+    </p>
+    <p>An <strong>API key</strong> is required. If you don't have one, contact whoever gave you this address.</p>
+  </section>
+
+  <section>
+    <h2>Örnek istek / Example request</h2>
+    <pre>curl "https://kur.etiyapi.com/api/v1/rates?symbols=USD,EUR" \
+  -H "X-API-Key: &lt;anahtarınız / your key&gt;"</pre>
+  </section>
+
+  <section>
+    <h2>Cevap / Response</h2>
+    <pre>{
+  "base": "TRY",
+  "rateDate": "2026-08-12",
+  "rates": [
+    { "currency": "USD", "rate": 0.0209, "unitPrice": 47.73 }
+  ]
+}</pre>
+    <table>
+      <tr><th>rate</th><td>1 TRY kaç &lt;currency&gt; eder / how much 1 TRY is worth in &lt;currency&gt;</td></tr>
+      <tr><th>unitPrice</th><td>1 &lt;currency&gt; kaç TRY eder / how much 1 &lt;currency&gt; is worth in TRY</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Kota / Rate limit</h2>
+    <p>
+      TR: Her anahtarın dakika başına bir istek sınırı vardır (aşılırsa <code>429</code> +
+      <code>Retry-After</code> döner). Sınır anahtarınıza göre değişebilir.
+    </p>
+    <p>
+      EN: Each key has a per-minute request limit (returns <code>429</code> +
+      <code>Retry-After</code> when exceeded). The limit may vary per key.
+    </p>
+  </section>
+
+  <footer>currency-api · TCMB kur servisi / TCMB exchange rate service</footer>
+</div>
+</body>
+</html>
