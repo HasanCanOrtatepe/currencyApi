@@ -1,8 +1,11 @@
-# currency-api
+# currency-api — Pair 3 Kur Servisi
 
 **TCMB'yi ana veri kaynağı alan kur servisi.** Merkez Bankası'nın günlük döviz kuru belgesini
 çeker, cache'ler ve kendi JSON sözleşmesiyle sunar. Bağımsız bir mikroservistir: veritabanı yok,
 Config Server'dan okumaz, servis kayıt defterine kaydolmaz.
+
+> Kullanıcıya görünen ürün adı **Pair 3 Kur Servisi**'dir (tanıtım sayfası + admin paneli).
+> `currency-api` teknik/depo adıdır ve kod, imaj, ortam değişkeni adlarında değişmez.
 
 ## Ne yapar
 

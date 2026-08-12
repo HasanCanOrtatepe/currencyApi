@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kur Servisi · TCMB Kur Bülteni API</title>
+<title>Pair 3 Kur Servisi · TCMB Kur Bülteni API</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,380;0,9..144,520;0,9..144,620;1,9..144,460&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -59,13 +60,10 @@
     max-width:1080px; margin:0 auto;
   }
   .wordmark{display:flex; align-items:center; gap:12px;}
-  .seal{
-    width:34px; height:34px; border-radius:50%;
-    border:1.5px solid var(--brass);
-    display:flex; align-items:center; justify-content:center;
-    font-family:var(--serif); font-size:13px; color:var(--brass-bright);
-    flex-shrink:0;
-  }
+  /* Halka ARTIK CSS'te değil, SVG'nin içindedir: mühür tek bir vektör olarak taşınır,
+     böylece favicon/panel gibi CSS'in ulaşmadığı yerlerde de aynı işaret görünür. */
+  .seal{width:34px; height:34px; flex-shrink:0; display:block;}
+  .seal svg{width:100%; height:100%;}
   .wordmark-text{display:flex; flex-direction:column; line-height:1.1;}
   .wordmark-text .title{font-family:var(--serif); font-weight:620; font-size:17px; letter-spacing:0.02em;}
   .wordmark-text .sub{font-family:var(--mono); font-size:10px; letter-spacing:0.14em; color:var(--text-dim); text-transform:uppercase; margin-top:3px;}
@@ -294,9 +292,9 @@
 <header class="masthead">
   <div class="masthead-inner">
     <div class="wordmark">
-      <div class="seal">KS</div>
+      <span class="seal" aria-hidden="true"><svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><circle cx="24" cy="24" r="22" stroke="#BE9349" stroke-width="1.5" fill="none"/><circle cx="24" cy="24" r="18" stroke="#BE9349" stroke-width="0.75" opacity="0.45" fill="none"/><g stroke="#DDB86A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M16 20h14"/><path d="M27 17l3 3-3 3"/><path d="M32 28H18"/><path d="M21 25l-3 3 3 3"/></g></svg></span>
       <div class="wordmark-text">
-        <span class="title">Kur Servisi</span>
+        <span class="title">Pair 3 Kur Servisi</span>
         <span class="sub">TCMB Exchange Bulletin API</span>
       </div>
     </div>
@@ -566,7 +564,7 @@ res, _ := client.<span class="tok-fn">Do</span>(req)</pre></div>
 <footer>
   <div class="wrap footer-inner">
     <div class="footer-seal">
-      <div class="seal">KS</div>
+      <span class="seal" aria-hidden="true"><svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><circle cx="24" cy="24" r="22" stroke="#BE9349" stroke-width="1.5" fill="none"/><circle cx="24" cy="24" r="18" stroke="#BE9349" stroke-width="0.75" opacity="0.45" fill="none"/><g stroke="#DDB86A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M16 20h14"/><path d="M27 17l3 3-3 3"/><path d="M32 28H18"/><path d="M21 25l-3 3 3 3"/></g></svg></span>
       <div class="footer-note">
         <strong>currency-api</strong>
         <span class="tr"> · TCMB kur servisi. <em>Etiya Telekom Lite</em> projesi için geliştirilmiş bağımsız bir mikroservistir. TCMB ile bağlantılı değildir.</span>

@@ -138,15 +138,28 @@ class ApiGuardFilterTest {
         assertThat(filter.shouldNotFilter(health)).isTrue();
     }
 
-    /** Kök yol tanıtım sayfasıdır (static/index.html), veri döndürmez — anahtar istemesin. */
+    /**
+     * Kök yol tanıtım sayfasıdır (static/index.html), veri döndürmez — anahtar istemesin.
+     *
+     * <p>VARLIKLAR da listede olmalı: yalnız sayfa muaf tutulup favicon/logo unutulduğunda
+     * sayfa açılıyor ama sekme ikonu 401 alıyordu (canlıda ölçülerek bulundu).
+     */
     @Test
-    @DisplayName("/ (tanıtım sayfası) anahtar istemez")
-    void rootPathIsExempt() {
-        MockHttpServletRequest root = new MockHttpServletRequest("GET", "/");
-        MockHttpServletRequest indexHtml = new MockHttpServletRequest("GET", "/index.html");
+    @DisplayName("Tanıtım sayfası VE varlıkları anahtar istemez")
+    void publicStaticAssetsAreExempt() {
+        for (String path : new String[] {"/", "/index.html", "/favicon.svg", "/logo.svg"}) {
+            assertThat(filter.shouldNotFilter(new MockHttpServletRequest("GET", path)))
+                    .as("muaf olmalı: %s", path)
+                    .isTrue();
+        }
+    }
 
-        assertThat(filter.shouldNotFilter(root)).isTrue();
-        assertThat(filter.shouldNotFilter(indexHtml)).isTrue();
+    /** Muafiyet bir LİSTEDİR, "her statik dosya serbest" değil. */
+    @Test
+    @DisplayName("Listede olmayan bir dosya muaf DEĞİLDİR")
+    void unlistedStaticPathIsNotExempt() {
+        assertThat(filter.shouldNotFilter(new MockHttpServletRequest("GET", "/gizli.svg")))
+                .isFalse();
     }
 
     /**

@@ -15,14 +15,17 @@ taklit ettiği şey bir *dış* hizmettir; CRM ile birlikte derlenip sürümlens
 bağımlı değiliz" iddiasını sınayan şeyin kendisi CRM'in parçası olurdu. Aynı gerekçeyle
 `admin-ui/` de Maven reaktörüne dahil değildir.
 
+Kullanıcıya görünen ürün adı **Pair 3 Kur Servisi**'dir (tanıtım sayfası + admin paneli);
+`currency-api` teknik/depo adıdır ve kod, imaj, ortam değişkeni adlarında DEĞİŞMEZ.
+
 ## Komutlar
 
 ```bash
-mvn test                       # 88 birim testi — ALTYAPISIZ (Redis/ağ gerekmez)
+mvn test                       # 95 birim testi — ALTYAPISIZ (Redis/ağ gerekmez)
 mvn spring-boot:run            # http://localhost:8095
 podman compose up -d --build   # tam yığın: redis + api + admin api + admin panel
 
-cd admin-ui && npx ng test --watch=false   # 14 birim testi
+cd admin-ui && npx ng test --watch=false   # 25 birim testi
 cd admin-ui && npx ng build                # prod build
 ```
 

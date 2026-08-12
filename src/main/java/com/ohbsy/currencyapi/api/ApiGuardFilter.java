@@ -14,6 +14,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Ticari kur API'lerinin iki kapısı: <b>anahtar</b> ve <b>hız sınırı</b>.
@@ -61,14 +62,19 @@ public class ApiGuardFilter extends OncePerRequestFilter {
      * Admin trafiği kendi filtre zincirine ({@code AdminAuthFilter}) sahiptir ve bir "tüketici"
      * değildir — hız sınırına tabi tutulması ya da consumer anahtarı istenmesi anlamsızdır.
      *
-     * <p>Kök yol ({@code /}) da muaftır: {@code static/index.html} orada servis tanıtımını
-     * (anahtar YOK iken) gösterir — domaine direkt giren biri anahtar istemeden önce servisin
-     * ne olduğunu görebilmelidir. Bu sayfa hiçbir veri döndürmez, yalnız bilgilendirme metnidir.
+     * <p>Tanıtım sayfası ve VARLIKLARI da muaftır: domaine direkt giren biri anahtar istemeden
+     * önce servisin ne olduğunu görebilmelidir. Yalnız sayfanın kendisi muaf tutulup varlıkları
+     * unutulursa sayfa açılır ama sekme ikonu 401 alır (ölçülerek bulundu) — bu yüzden liste
+     * TAM ADLARLA yazılır: yeni bir varlık eklendiğinde buraya da eklenmesi gerekir ve
+     * "/static altındaki her şey serbest" gibi geniş bir kural açılmaz.
      */
+    private static final Set<String> PUBLIC_STATIC_PATHS =
+            Set.of("/", "/index.html", "/favicon.svg", "/logo.svg");
+
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.equals("/") || path.equals("/index.html")
+        return PUBLIC_STATIC_PATHS.contains(path)
                 || path.startsWith("/actuator") || path.startsWith("/__")
                 || path.startsWith("/admin");
     }
