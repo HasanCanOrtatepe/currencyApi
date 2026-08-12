@@ -1,6 +1,9 @@
 # syntax=docker/dockerfile:1.7
 #
-# T34 Faz 7 — sahte kur satıcısı imajı.
+# currency-api imajı — TCMB tabanlı kur servisi.
+#
+# (Proje T34 Faz 7'de sahte bir satıcı olarak doğdu; bugün gerçek bir servistir ve satıcı
+# taklidi yalnız tüketici testleri için duran bir yüzeydir — bkz. README "Simülatör yüzü".)
 #
 # CRM'in kök Containerfile'ından AYRIDIR ve olmalıdır: o dosya çok modüllü reaktörü bilir
 # (MODULE build argümanı, common-lib katmanı). Bu proje reaktöre girmez, tek modüldür ve

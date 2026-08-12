@@ -1,5 +1,11 @@
 target/
 *.jar
-.idea/
 *.iml
+.idea/
 .vscode/
+
+# Sırlar. NEGASYON SIRASI ÖNEMLİDİR: `!.env.example` kendisini kapsayan `.env.*` kalıbından
+# SONRA gelmelidir, yoksa şablon dosyası da yok sayılır ve depoda hiç görünmez.
+.env
+.env.*
+!.env.example

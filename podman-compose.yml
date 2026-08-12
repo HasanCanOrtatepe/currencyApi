@@ -1,0 +1,75 @@
+# currency-api — KALICI SUNUCU olarak çalıştırma.
+#
+# Bu dosyanın varlık sebebi, servisin tüketicisinden BAĞIMSIZ yaşayabilmesidir. CRM'in kendi
+# compose'unda da bir `currency-api` bloğu vardır ama o blok geliştirme kolaylığı içindir:
+# kaynağı yerel bir yoldan derler ve CRM yığınıyla birlikte doğar/ölür. Servis gerçekten bir
+# "dış hizmet" gibi davranacaksa tüketicinin yaşam döngüsüne bağlı OLMAMALIDIR — yoksa
+# "dış hizmete bağımlı değiliz" iddiası, dış hizmeti kendimiz ayakta tuttuğumuz için sınanmamış
+# kalır.
+#
+#   podman compose up -d --build      # http://<bu-makine>:8095
+#
+# Tüketici tarafında (CRM) tek değişiklik base URL'dir:
+#   CRM_CURRENCY_PROVIDER=currencyapi
+#   CRM_CURRENCY_CURRENCYAPI_BASE_URL=http://<bu-makine>:8095
+#   CRM_CURRENCY_CURRENCYAPI_API_KEY=<CURRENCY_CRM_KEY ile aynı>
+
+services:
+  redis:
+    image: redis:7
+    mem_limit: 128m
+    # KALICILIK AÇIK — bilinçli. Cache burada yalnız bir hızlandırıcı değildir: `retention`
+    # penceresi (7g) hafta sonu ve resmî tatillerde "son geçerli kur"u taşıyan güvenlik ağıdır.
+    # Bellekte tutulsaydı cumartesi günü bir yeniden başlatma o ağı silerdi ve servis, TCMB
+    # yayın yapmadığı için pazartesiye kadar kursuz kalırdı — yani en çok ihtiyaç duyulan anda.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - currency-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
+  currency-api:
+    build:
+      context: .
+      dockerfile: Containerfile
+    mem_limit: 384m
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xms64m -Xmx256m -XX:+ExitOnOutOfMemoryError"
+      CURRENCY_CACHE_TYPE: redis
+      REDIS_HOST: redis
+      # Boş bırakılırsa servisin kendi varsayılanı (gerçek TCMB) geçerlidir.
+      TCMB_BASE_URL: ${TCMB_BASE_URL:-}
+      # ANAHTAR DOĞRULAMASI BURADA VARSAYILAN OLARAK AÇIKTIR ve CRM'in compose'undaki
+      # varsayılandan (kapalı) bilinçli olarak ayrılır: orada servis yalnız compose ağında
+      # görünür, burada ise 8095 makinenin ağ arayüzünde durur. Ağa açılan bir uç, anahtarsız
+      # bırakılırsa aynı ağdaki herkesin TCMB kotamızı harcayabileceği bir uçtur.
+      CURRENCY_AUTH_ENABLED: ${CURRENCY_AUTH_ENABLED:-true}
+      # "anahtar=tuketici,anahtar2=tuketici2" — .env'den gelir, bu dosyaya YAZILMAZ.
+      # Auth açık ve hiç anahtar tanımlı değilse servis AÇILIŞTA düşer (sessizce her isteği
+      # 401'lemektense gürültülü hata).
+      CURRENCY_API_KEYS: ${CURRENCY_API_KEYS:-}
+      CURRENCY_RATE_LIMIT: ${CURRENCY_RATE_LIMIT:-120}
+    ports:
+      # 8095'i LAN'a açar. İNTERNETE yönlendirmeyin: anahtar düz HTTP üzerinde açık gider ve
+      # yol boyunca okunabilir. Dışarı açılacaksa önüne TLS sonlandıran bir ters vekil konur.
+      - "8095:8095"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8095 && printf 'GET /actuator/health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    # Makine yeniden başlasa da servis geri gelsin: "sürekli çalışan sunucu" iddiasının
+    # tek bir el müdahalesine bağlı olmaması gerekir.
+    restart: unless-stopped
+
+volumes:
+  currency-redis:

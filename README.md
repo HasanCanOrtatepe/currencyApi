@@ -99,6 +99,45 @@ Sıfır konfigürasyonla çalışır: hiçbir ayar verilmeden gerçek TCMB'den k
 > çok instance varsa `redis` olmalıdır: bellekte tutulursa her instance kendi kurunu çeker
 > (satıcı isteği instance sayısıyla çarpılır) ve iki instance **farklı kur** döndürebilir.
 
+### Kalıcı sunucu olarak çalıştırma (ayrı makine)
+
+Servis, tüketicisinden **bağımsız yaşayabilmelidir**. Depodaki `podman-compose.yml` bunun için
+vardır: servisi kendi Redis'iyle birlikte tek komutla ayağa kaldırır ve makine yeniden başlasa
+da geri getirir (`restart: unless-stopped`).
+
+```bash
+cp .env.example .env      # CURRENCY_API_KEYS=<anahtar>=crm
+podman compose up -d --build
+curl -H "X-API-Key: <anahtar>" "http://<bu-makine>:8095/api/v1/rates?symbols=USD"
+```
+
+Tüketici tarafında (CRM) **kod değişmez**, yalnız üç ortam değişkeni:
+
+```
+CRM_CURRENCY_PROVIDER=currencyapi
+CRM_CURRENCY_CURRENCYAPI_BASE_URL=http://<bu-makine>:8095
+CRM_CURRENCY_CURRENCYAPI_API_KEY=<aynı anahtar>
+```
+
+Farklar CRM'in geliştirme compose'undaki bloğa göre bilinçlidir:
+
+| | CRM compose'undaki blok | Bu dosya |
+|---|---|---|
+| Amaç | geliştirme kolaylığı | kalıcı hizmet |
+| Yaşam döngüsü | CRM yığınıyla doğar/ölür | bağımsız, `restart: unless-stopped` |
+| Anahtar doğrulaması | varsayılan **kapalı** (yalnız compose ağında görünür) | varsayılan **açık** (8095 makinenin ağ arayüzünde) |
+| Redis | CRM'in Redis'i | kendi Redis'i, **kalıcı** (`appendonly`) |
+
+> **Redis kalıcılığı burada bir ayrıntı değil:** `retention` penceresi (7g) hafta sonu ve resmî
+> tatillerde "son geçerli kur"u taşıyan güvenlik ağıdır. Bellekte tutulsaydı cumartesi günü bir
+> yeniden başlatma o ağı silerdi ve TCMB yayın yapmadığı için servis pazartesiye kadar kursuz
+> kalırdı — yani ağın en çok gerektiği anda. Doğrulandı (2026-08-12): tam yeniden başlatmanın
+> ardından ilk istek `FRESH_CACHE` döndü.
+
+> **8095'i internete yönlendirmeyin.** Anahtar düz HTTP üzerinde açık gider ve yol boyunca
+> okunabilir; LAN'da kabul edilebilir, dışarı açılacaksa önüne TLS sonlandıran bir ters vekil
+> konur.
+
 ## Anahtar ve kota (ticari API davranışı)
 
 Servis, kendisini ticari bir API gibi sunabilir: istek `X-API-Key` header'ı ister ve her tüketici
