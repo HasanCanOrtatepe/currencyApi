@@ -1,0 +1,1488 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="TCMB kur mikroservisinin uçtan uca çalışma mantığı: Cloudflare tüneli, 15 dakikalık önbellek, Redis'in üç ayrı işi, katmanlar ve günlük işletim.">
+<title>Pair 3 Kur Servisi Rehberi</title>
+<style>
+  /* ── Token'lar ────────────────────────────────────────────────────────
+     Ürünün kendi kimliği (tanıtım sayfası + admin paneli): lacivert + pirinç.
+     Açık tema bilinçli olarak SOĞUK bir kâğıt — krem değil; marka korunur,
+     "sıcak krem + serif" klişesine düşülmez. */
+  :root {
+    color-scheme: light;
+
+    --ground:        #F3F5F8;
+    --panel:         #FFFFFF;
+    --panel-sunk:    #ECEFF4;
+    --code-ground:   #14203A;
+    --code-ink:      #E4E9F2;
+
+    --ink:           #12203A;
+    --ink-soft:      #3A4A63;
+    --ink-mute:      #64748B;
+
+    --rule:          rgba(18, 32, 58, 0.12);
+    --rule-strong:   rgba(18, 32, 58, 0.22);
+
+    --brass:         #8C6425;
+    --brass-line:    rgba(190, 147, 73, 0.55);
+    --brass-wash:    rgba(190, 147, 73, 0.10);
+
+    --good:          #2E7D5B;
+    --warn:          #A8452E;
+
+    --display: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+    --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+    --measure: 68ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground:      #0F1B2D;
+      --panel:       #16273D;
+      --panel-sunk:  #101C2E;
+      --code-ground: #0A1220;
+      --code-ink:    #DCE3EF;
+
+      --ink:         #F1F4F9;
+      --ink-soft:    #BAC5D6;
+      --ink-mute:    #7E8CA3;
+
+      --rule:        rgba(241, 244, 249, 0.14);
+      --rule-strong: rgba(241, 244, 249, 0.26);
+
+      --brass:       #DDB86A;
+      --brass-line:  rgba(190, 147, 73, 0.45);
+      --brass-wash:  rgba(190, 147, 73, 0.12);
+
+      --good:        #56A17F;
+      --warn:        #D08061;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground:      #0F1B2D;
+    --panel:       #16273D;
+    --panel-sunk:  #101C2E;
+    --code-ground: #0A1220;
+    --code-ink:    #DCE3EF;
+    --ink:         #F1F4F9;
+    --ink-soft:    #BAC5D6;
+    --ink-mute:    #7E8CA3;
+    --rule:        rgba(241, 244, 249, 0.14);
+    --rule-strong: rgba(241, 244, 249, 0.26);
+    --brass:       #DDB86A;
+    --brass-line:  rgba(190, 147, 73, 0.45);
+    --brass-wash:  rgba(190, 147, 73, 0.12);
+    --good:        #56A17F;
+    --warn:        #D08061;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── İskelet ─────────────────────────────────────────────────────── */
+  .shell {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+  @media (min-width: 1024px) {
+    .shell {
+      grid-template-columns: 230px minmax(0, 1fr);
+      gap: 56px;
+      padding: 0 40px;
+    }
+  }
+
+  /* ── Başlık ──────────────────────────────────────────────────────── */
+  .masthead {
+    grid-column: 1 / -1;
+    padding: 64px 0 40px;
+    border-bottom: 1px solid var(--rule-strong);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .brandline { display: flex; align-items: center; gap: 12px; }
+  .brandline svg { width: 34px; height: 34px; flex-shrink: 0; }
+  .brandline .who {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(30px, 4.6vw, 46px);
+    line-height: 1.1;
+    font-weight: 600;
+    margin: 0;
+    max-width: 20ch;
+    text-wrap: balance;
+  }
+  .standfirst {
+    margin: 0;
+    max-width: var(--measure);
+    font-size: 17px;
+    color: var(--ink-soft);
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-mute);
+    letter-spacing: 0.03em;
+  }
+
+  /* ── İçindekiler ─────────────────────────────────────────────────── */
+  nav.toc { display: none; }
+  @media (min-width: 1024px) {
+    nav.toc {
+      display: block;
+      position: sticky;
+      top: 0;
+      align-self: start;
+      max-height: 100vh;
+      overflow-y: auto;
+      padding: 40px 0 60px;
+    }
+  }
+  .toc-title {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-bottom: 14px;
+  }
+  .toc ol { list-style: none; margin: 0; padding: 0; counter-reset: toc; }
+  .toc li { counter-increment: toc; }
+  .toc a {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 8px;
+    padding: 5px 0;
+    color: var(--ink-soft);
+    text-decoration: none;
+    font-size: 13.5px;
+    line-height: 1.35;
+    border-radius: 3px;
+  }
+  .toc a::before {
+    content: counter(toc, decimal-leading-zero);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--brass);
+    padding-top: 2px;
+  }
+  .toc a:hover { color: var(--ink); }
+
+  /* ── İçerik ──────────────────────────────────────────────────────── */
+  main { padding: 40px 0 96px; min-width: 0; }
+  section { padding-top: 44px; scroll-margin-top: 24px; }
+  section + section { margin-top: 24px; border-top: 1px solid var(--rule); }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--brass);
+    margin: 0 0 10px;
+  }
+  h2 {
+    font-family: var(--display);
+    font-size: clamp(22px, 2.6vw, 28px);
+    line-height: 1.2;
+    font-weight: 600;
+    margin: 0 0 16px;
+    max-width: 26ch;
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--sans);
+    font-size: 15.5px;
+    font-weight: 650;
+    margin: 32px 0 8px;
+    color: var(--ink);
+  }
+  p { margin: 0 0 16px; max-width: var(--measure); color: var(--ink-soft); }
+  p strong, li strong { color: var(--ink); font-weight: 650; }
+  ul, ol { max-width: var(--measure); padding-left: 22px; margin: 0 0 16px; color: var(--ink-soft); }
+  li { margin-bottom: 7px; }
+  a { color: var(--brass); }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--panel-sunk);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 0.05em 0.35em;
+    color: var(--ink);
+    word-break: break-word;
+  }
+
+  pre {
+    background: var(--code-ground);
+    color: var(--code-ink);
+    border-radius: 8px;
+    padding: 18px 20px;
+    overflow-x: auto;
+    margin: 0 0 20px;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+  pre .c { color: #8FA0BC; font-style: italic; }
+  pre .k { color: #E3BC7B; }
+  pre .s { color: #9CC7A8; }
+
+  /* ── Vurgu kutusu — projenin kendi "neden böyle" sesi ────────────── */
+  .why {
+    border-left: 3px solid var(--brass);
+    background: var(--brass-wash);
+    padding: 16px 20px;
+    border-radius: 0 6px 6px 0;
+    margin: 0 0 20px;
+    max-width: var(--measure);
+  }
+  .why p { margin: 0; color: var(--ink-soft); }
+  .why p + p { margin-top: 10px; }
+  .why .tag {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--brass);
+    margin-bottom: 6px;
+  }
+
+  /* ── Tablolar ────────────────────────────────────────────────────── */
+  .table-wrap { overflow-x: auto; margin: 0 0 22px; border: 1px solid var(--rule); border-radius: 8px; background: var(--panel); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  td { color: var(--ink-soft); }
+  tr:last-child td { border-bottom: none; }
+  td code { white-space: nowrap; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink); }
+
+  .pill {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 20px;
+    white-space: nowrap;
+    display: inline-block;
+  }
+  .pill-good { background: rgba(46, 125, 91, 0.15); color: var(--good); }
+  .pill-warn { background: rgba(168, 69, 46, 0.15); color: var(--warn); }
+  .pill-mute { background: var(--panel-sunk); color: var(--ink-mute); }
+
+  /* ── Şekiller ────────────────────────────────────────────────────── */
+  figure {
+    margin: 0 0 24px;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 22px 20px 16px;
+    overflow-x: auto;
+  }
+  figure svg { display: block; max-width: 100%; height: auto; margin: 0 auto; color: var(--ink-soft); }
+  figcaption {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--rule);
+    font-size: 13px;
+    color: var(--ink-mute);
+  }
+  .fig-brass { color: var(--brass); }
+  .fig-strong { fill: var(--ink); }
+
+  /* ── Sözlük ──────────────────────────────────────────────────────── */
+  dl.glossary { max-width: var(--measure); margin: 0; }
+  dl.glossary div {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--rule);
+    display: grid;
+    gap: 4px;
+  }
+  dl.glossary dt { font-family: var(--mono); font-size: 13px; color: var(--brass); }
+  dl.glossary dd { margin: 0; color: var(--ink-soft); font-size: 14.5px; }
+
+  footer {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--rule-strong);
+    padding: 28px 0 60px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-mute);
+  }
+
+  :focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+  html { scroll-behavior: smooth; }
+</style>
+<style>
+  /* Artifact ortamının sağladığı reset burada elle veriliyor (dosya tek başına açılabilsin). */
+  *, *::before, *::after { box-sizing: border-box; }
+  img, svg { max-width: 100%; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="masthead">
+    <div class="brandline">
+      <svg viewBox="0 0 48 48" role="img" aria-label="Pair 3 Kur Servisi mührü">
+        <circle cx="24" cy="24" r="22" stroke="#BE9349" stroke-width="1.5" fill="none"/>
+        <circle cx="24" cy="24" r="18" stroke="#BE9349" stroke-width="0.75" opacity="0.45" fill="none"/>
+        <g stroke="#DDB86A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M16 20h14"/><path d="M27 17l3 3-3 3"/>
+          <path d="M32 28H18"/><path d="M21 25l-3 3 3 3"/>
+        </g>
+      </svg>
+      <span class="who">Pair 3 Kur Servisi · currency-api</span>
+    </div>
+    <h1>Servis baştan sona nasıl çalışıyor</h1>
+    <p class="standfirst">
+      TCMB'den kurun nasıl alındığından, Redis'in tam olarak neyi tuttuğuna; Cloudflare'in
+      ne işe yaradığından, projenin neden hâlâ bir dizüstünde çalıştığına kadar. Kod
+      okumadan anlaşılacak kadar açık, kod yazarken işe yarayacak kadar ayrıntılı.
+    </p>
+    <div class="meta">
+      <span>Java 25 · Spring Boot 4</span>
+      <span>Angular · Redis · Podman</span>
+      <span>127 backend + 25 arayüz testi</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="İçindekiler">
+    <div class="toc-title">İçindekiler</div>
+    <ol>
+      <li><a href="#ne-yapar">Servis ne yapar</a></li>
+      <li><a href="#buyuk-resim">Büyük resim: ne nerede çalışıyor</a></li>
+      <li><a href="#cloudflare">Cloudflare neden var</a></li>
+      <li><a href="#neden-local">Neden hâlâ dizüstünde</a></li>
+      <li><a href="#yolculuk">Bir isteğin yolculuğu</a></li>
+      <li><a href="#onbellek">15 dakika kuralı</a></li>
+      <li><a href="#redis">Redis üç ayrı iş yapıyor</a></li>
+      <li><a href="#tcmb">TCMB'nin üç tuzağı</a></li>
+      <li><a href="#katmanlar">Katmanlar ve sınıflar</a></li>
+      <li><a href="#anahtarlar">API anahtarları</a></li>
+      <li><a href="#sinirlar">Üç yüzey, üç sınır</a></li>
+      <li><a href="#isletim">Günlük işletim</a></li>
+      <li><a href="#sozluk">Sözlük</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <!-- ═══════════════════════════════════════════════════ 1 -->
+    <section id="ne-yapar">
+      <p class="eyebrow">Başlangıç</p>
+      <h2>Servis ne yapar</h2>
+      <p>
+        Merkez Bankası (TCMB) her iş günü bir döviz kuru bülteni yayınlar — ham bir XML
+        dosyası. Bu servis o dosyayı çeker, temizler, kendi JSON sözleşmesine çevirir ve
+        anahtarla korunan tek bir uçtan sunar.
+      </p>
+      <pre><code>GET /api/v1/rates?symbols=USD,EUR
+X-API-Key: cur_...
+
+{
+  <span class="k">"base"</span>: <span class="s">"TRY"</span>,
+  <span class="k">"rateDate"</span>: <span class="s">"2026-08-12"</span>,   <span class="c">// TCMB'nin yayın günü</span>
+  <span class="k">"fetchedAt"</span>: <span class="s">"2026-08-12T18:03:51Z"</span>,  <span class="c">// bizim çekme anımız</span>
+  <span class="k">"provider"</span>: <span class="s">"tcmb"</span>,
+  <span class="k">"cache"</span>: <span class="s">"FRESH_CACHE"</span>,      <span class="c">// kur nereden geldi</span>
+  <span class="k">"stale"</span>: false,
+  <span class="k">"rates"</span>: [
+    { <span class="k">"currency"</span>: <span class="s">"USD"</span>, <span class="k">"rate"</span>: 0.0209407857, <span class="k">"unitPrice"</span>: 47.7537000916 }
+  ]
+}</code></pre>
+
+      <h3>Neden iki kur yönü birden var</h3>
+      <p>
+        <code>rate</code> = 1 TL kaç dolar eder (çevrim için). <code>unitPrice</code> = 1 dolar
+        kaç TL eder (ekranda göstermek için). Tüketicilerin yarısı birini, yarısı diğerini
+        bekler.
+      </p>
+      <div class="why">
+        <span class="tag">Neden böyle</span>
+        <p>
+          Dönüşümü her tüketicinin kendi yapması, <strong>sessiz yön hatalarının</strong>
+          kaynağıdır: ters çevrilmiş bir kur da geçerli bir pozitif sayıdır. 47,73 ile 0,0209
+          arasında yaklaşık 2000 katlık bir fark var ve hiçbir doğrulama bunu yakalamaz —
+          fatura tutarı 2000 kat şişer, kimse fark etmez. İki yönü de biz hesaplayıp
+          verdiğimizde bu hata sınıfı ortadan kalkar.
+        </p>
+      </div>
+
+      <h3>Üç davranış vaadi</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Vaat</th><th>Nasıl</th><th>Kanıtı</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Her istekte TCMB'ye gidilmez</strong></td>
+              <td>15 dakikalık tazelik penceresi; içindeyken sağlayıcı hiç çağrılmaz</td>
+              <td><code>cache: "FRESH_CACHE"</code></td>
+            </tr>
+            <tr>
+              <td><strong>TCMB düşse de kur döner</strong></td>
+              <td>Son geçerli kur sunulur</td>
+              <td><code>cache: "STALE_CACHE"</code>, <code>stale: true</code></td>
+            </tr>
+            <tr>
+              <td><strong>Hafta sonu/tatilde de çalışır</strong></td>
+              <td>TCMB o gün belge yayınlamaz (404); son iş gününün kuru sunulur</td>
+              <td>Aynı yol, <code>NOT_PUBLISHED</code> sebebiyle</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 2 -->
+    <section id="buyuk-resim">
+      <p class="eyebrow">Mimari</p>
+      <h2>Büyük resim: ne nerede çalışıyor</h2>
+      <p>
+        En sık karıştırılan nokta burası, o yüzden en baştan net olsun:
+        <strong>Cloudflare'de hiçbir şey barınmıyor.</strong> Her şey bir dizüstü bilgisayarda,
+        Podman'ın çalıştırdığı bir Linux sanal makinesinin içinde, dört konteyner olarak
+        çalışıyor.
+      </p>
+
+      <figure>
+        <svg viewBox="0 0 860 400" role="img" aria-label="İstek Cloudflare üzerinden dizüstündeki konteynere ulaşır; tüneli dizüstü açar">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+            </marker>
+            <marker id="arb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="#BE9349"/>
+            </marker>
+          </defs>
+
+          <!-- istemci -->
+          <rect x="10" y="150" width="130" height="54" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="75" y="172" text-anchor="middle" font-size="12.5" fill="currentColor" font-weight="600">Arkadaşınız</text>
+          <text x="75" y="190" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.7">(Almanya)</text>
+
+          <!-- cloudflare -->
+          <rect x="215" y="132" width="150" height="90" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="290" y="160" text-anchor="middle" font-size="12.5" fill="currentColor" font-weight="600">Cloudflare</text>
+          <text x="290" y="178" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.7">TLS burada biter</text>
+          <text x="290" y="194" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.7">barındırma YOK</text>
+
+          <!-- mac -->
+          <rect x="450" y="40" width="400" height="330" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="470" y="64" font-size="11" fill="currentColor" opacity="0.75" font-family="ui-monospace, monospace">DİZÜSTÜ BİLGİSAYAR</text>
+
+          <!-- cloudflared -->
+          <rect x="472" y="80" width="160" height="46" rx="5" fill="none" stroke="#BE9349" stroke-width="1.5"/>
+          <text x="552" y="100" text-anchor="middle" font-size="12" fill="#BE9349" font-weight="600">cloudflared</text>
+          <text x="552" y="116" text-anchor="middle" font-size="10" fill="#BE9349" opacity="0.85">tüneli AÇAN taraf</text>
+
+          <!-- vm -->
+          <rect x="472" y="150" width="360" height="196" rx="6" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 3"/>
+          <text x="492" y="171" font-size="10.5" fill="currentColor" opacity="0.7" font-family="ui-monospace, monospace">podman VM (Linux)</text>
+
+          <rect x="492" y="185" width="150" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <text x="567" y="203" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">currency-api</text>
+          <text x="567" y="219" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.7">:8095 · herkese açık</text>
+
+          <rect x="662" y="185" width="150" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <text x="737" y="203" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">redis</text>
+          <text x="737" y="219" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.7">kur · kota · anahtar</text>
+
+          <rect x="492" y="245" width="150" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <text x="567" y="263" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">admin API</text>
+          <text x="567" y="279" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.7">:8097 · yalnız yerel</text>
+
+          <rect x="662" y="245" width="150" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <text x="737" y="263" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">admin panel</text>
+          <text x="737" y="279" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.7">:8096 · yalnız yerel</text>
+
+          <text x="652" y="320" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.65">konteynerler</text>
+
+          <!-- oklar -->
+          <line x1="140" y1="177" x2="210" y2="177" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"/>
+          <text x="175" y="168" text-anchor="middle" font-size="9.5" fill="currentColor" opacity="0.75">https</text>
+
+          <!-- tunel: MAC -> CLOUDFLARE yonu -->
+          <path d="M470 103 L400 103 Q370 103 370 140 L370 168" fill="none" stroke="#BE9349" stroke-width="2" marker-end="url(#arb)"/>
+          <text x="404" y="96" text-anchor="middle" font-size="10" fill="#BE9349" font-weight="600">① tüneli AÇAR</text>
+
+          <!-- istek geri iter -->
+          <path d="M365 195 L420 195 Q445 195 445 207 L492 207" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#ar)"/>
+          <text x="408" y="222" text-anchor="middle" font-size="9.5" fill="currentColor" opacity="0.75">② isteği geri iter</text>
+
+          <line x1="642" y1="207" x2="658" y2="207" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"/>
+        </svg>
+        <figcaption>
+          Bağlantıyı <strong>dizüstü açar</strong> (①, pirinç ok). Cloudflare o hazır hattan
+          isteği geri iter (②, kesikli). Cloudflare hiçbir zaman dizüstünü aramaz — arayamaz da.
+        </figcaption>
+      </figure>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Konteyner</th><th>Port</th><th>Ne yapar</th><th>Kim erişir</th></tr></thead>
+          <tbody>
+            <tr><td><code>currency-api</code></td><td class="num">8095</td><td>Kur ucu + tanıtım sayfası</td><td>Herkes (tünel üzerinden)</td></tr>
+            <tr><td><code>redis</code></td><td class="num">—</td><td>Kur önbelleği, kota sayacı, anahtar deposu</td><td>Yalnız diğer konteynerler</td></tr>
+            <tr><td><code>currency-api-admin</code></td><td class="num">8097</td><td>Anahtar yönetimi API'si</td><td>Yalnız bu makine</td></tr>
+            <tr><td><code>admin-ui</code></td><td class="num">8096</td><td>Angular yönetim paneli</td><td>Yalnız bu makine</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Son iki konteyner <strong>aynı imajdan</strong> çalışır — fark yalnızca ortam
+        değişkenleri: admin olanda <code>CURRENCY_ADMIN_ENABLED=true</code> ve farklı bir port.
+      </p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 3 -->
+    <section id="cloudflare">
+      <p class="eyebrow">Ağ</p>
+      <h2>Cloudflare neden var, tam olarak ne yaptı</h2>
+      <p>
+        Amaç basitti: farklı ülkelerdeki arkadaşlar bu servise erişebilsin. Ama bir ev
+        bağlantısındaki bilgisayarı internete açmak sanıldığından zordur.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Gereken</th><th>Cloudflare olmadan</th><th>Cloudflare ile</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Sabit adres</td>
+              <td>Modemin genel IP'si — servis sağlayıcı değiştirdiğinde bozulur</td>
+              <td><code>kur.etiyapi.com</code> — değişmez</td>
+            </tr>
+            <tr>
+              <td>Router ayarı</td>
+              <td>Port yönlendirme; her ağda yeniden, modem paneline erişim gerekir</td>
+              <td><span class="pill pill-good">gerekmez</span></td>
+            </tr>
+            <tr>
+              <td>CGNAT engeli</td>
+              <td>Türkiye'deki çoğu ev bağlantısında <strong>genel IP yoktur</strong>; dışarıdan bağlanmak teknik olarak imkânsızdır</td>
+              <td><span class="pill pill-good">sorun değil</span> — bağlantı içeriden açılır</td>
+            </tr>
+            <tr>
+              <td>HTTPS</td>
+              <td>Let's Encrypt kurulumu, 90 günde bir yenileme, kırılınca tarayıcı uyarısı</td>
+              <td>Otomatik, ücretsiz</td>
+            </tr>
+            <tr>
+              <td>Ev IP'sinin gizliliği</td>
+              <td>Herkese açık, taranır</td>
+              <td>Gizli kalır</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Yön: kim kimi arıyor</h3>
+      <p>
+        Buradaki tek püf nokta şu: <strong>Cloudflare bilgisayarınıza bağlanmaz; bilgisayarınız
+        Cloudflare'e bağlanır.</strong> <code>cloudflared</code> süreci, tıpkı tarayıcınızın bir
+        siteye bağlanması gibi <em>dışarı doğru</em> bir bağlantı açar ve o hattı açık tutar.
+        Biri <code>kur.etiyapi.com</code>'u istediğinde Cloudflare, zaten açık olan bu hattan
+        isteği aşağı iter.
+      </p>
+      <div class="why">
+        <span class="tag">Benzetme</span>
+        <p>
+          Çağrı merkezini siz arayıp hatta beklemede kalıyorsunuz. Onlar sizi arayamaz
+          (numaranız kayıtlı değil), ama siz hattı açık tuttuğunuz sürece istedikleri an
+          konuşabilirler. Port yönlendirmeye gerek olmamasının sebebi tam olarak budur:
+          içeriden dışarı açılan bağlantıya hiçbir modem engel olmaz.
+        </p>
+      </div>
+
+      <h3>Yapılandırma</h3>
+      <p>
+        Tünel <em>isimli</em> bir tüneldir (geçici olan değil) ve yapılandırmasında
+        <strong>yalnız 8095</strong> vardır:
+      </p>
+      <pre><code><span class="c"># ~/.cloudflared/config.yml</span>
+tunnel: b9dfbf57-...
+credentials-file: /Users/.../.cloudflared/b9dfbf57-....json
+
+ingress:
+  <span class="c"># Admin yüzeyi (8096/8097) BİLİNÇLİ olarak yok: tünel path değil
+  # TÜM portu taşır. Buraya yazılmayan bir port internetten
+  # yapısal olarak erişilemez.</span>
+  - hostname: kur.etiyapi.com
+    service: http://localhost:8095
+  - service: http_status:404</code></pre>
+
+      <h3>Her istek gerçekten bilgisayara mı geliyor?</h3>
+      <p>
+        Evet — ölçüldü. Cevap başlıklarındaki <code>cf-cache-status</code> bunu söylüyor:
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>İstek</th><th>Başlık</th><th>Anlamı</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>/api/v1/rates</code></td>
+              <td><code>DYNAMIC</code></td>
+              <td>Önbelleğe alınmıyor; her istek gerçekten bilgisayara geliyor. Yanındaki
+                  <code>x-correlation-id</code> her seferinde yeni bir değer — onu üreten filtre
+                  bilgisayarda çalışıyor</td>
+            </tr>
+            <tr>
+              <td><code>/favicon.svg</code></td>
+              <td><code>HIT</code>, <code>age: 2108</code></td>
+              <td>Bu istek bilgisayara <strong>hiç gelmedi</strong>; Cloudflare 35 dakika
+                  önceki kopyasını verdi</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Yani kur verisi her zaman canlı; yalnız ikon gibi değişmeyen dosyalar kenarda
+        önbelleklenir. Bu iyi bir şey: makinenin yükünü azaltır, veriyi bayatlatmaz.
+      </p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 4 -->
+    <section id="neden-local">
+      <p class="eyebrow">İşletim gerçeği</p>
+      <h2>Neden proje hâlâ bir dizüstünde</h2>
+      <p>
+        Çünkü Cloudflare bir <strong>kapı</strong>, <strong>ev</strong> değil. Kapıyı açtı ama
+        evin içindeki her şey — Java süreci, Redis, Angular paneli — hâlâ dizüstünde. Bilgisayar
+        kapanınca Cloudflare'in gösterecek bir şeyi kalmaz; ziyaretçi <code>502</code> alır.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Ne olursa</th><th>Sonuç</th></tr></thead>
+          <tbody>
+            <tr><td>Konteyner <strong>çökerse</strong></td><td><span class="pill pill-good">kendiliğinden döner</span> — <code>restart: unless-stopped</code></td></tr>
+            <tr><td>Konteyner <strong>elle durdurulursa</strong></td><td><span class="pill pill-warn">dönmez</span> — elle durdurma kasıtlı sayılır</td></tr>
+            <tr><td><strong>Redis</strong> düşerse</td><td>Dinamik anahtarlar <code>401</code>; statik anahtar ve kur sunumu çalışır</td></tr>
+            <tr><td><strong>cloudflared</strong> çökerse</td><td>Dışarısı erişemez; <code>KeepAlive</code> geri getirir, yerel erişim etkilenmez</td></tr>
+            <tr><td>Bilgisayar <strong>yeniden başlarsa</strong></td><td><span class="pill pill-good">~18 sn'de toparlanır</span> — ölçüldü</td></tr>
+            <tr><td>Bilgisayar <strong>kapanır/uyursa</strong></td><td><span class="pill pill-warn">servis durur</span> — hiçbir yerde kopyası yok</td></tr>
+            <tr><td>İnternet keserse</td><td>Dışarısı erişemez; yerel çalışmaya devam eder</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Yeniden başlatma zinciri — üç halka</h3>
+      <p>
+        Bilgisayar açıldığında servisin kendiliğinden dönmesi tek bir ayara değil, art arda
+        üç halkaya bağlı. Biri eksikse servis ölü kalır:
+      </p>
+
+      <figure>
+        <svg viewBox="0 0 800 150" role="img" aria-label="Açılış zinciri: LaunchDaemon sanal makineyi başlatır, kullanıcı servisi konteynerleri geri getirir, ikinci LaunchDaemon tüneli kurar">
+          <defs>
+            <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <rect x="8" y="34" width="180" height="66" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="98" y="52" text-anchor="middle" font-size="10" fill="#BE9349" font-family="ui-monospace, monospace">HALKA 1</text>
+          <text x="98" y="72" text-anchor="middle" font-size="12" fill="currentColor" font-weight="600">LaunchDaemon</text>
+          <text x="98" y="89" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.75">sanal makineyi açar</text>
+
+          <line x1="188" y1="67" x2="228" y2="67" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+
+          <rect x="230" y="34" width="210" height="66" rx="6" fill="none" stroke="#BE9349" stroke-width="2"/>
+          <text x="335" y="52" text-anchor="middle" font-size="10" fill="#BE9349" font-family="ui-monospace, monospace">HALKA 2 — ATLANANI</text>
+          <text x="335" y="72" text-anchor="middle" font-size="12" fill="currentColor" font-weight="600">podman-restart</text>
+          <text x="335" y="89" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.75">konteynerleri geri getirir</text>
+
+          <line x1="440" y1="67" x2="480" y2="67" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+
+          <rect x="482" y="34" width="180" height="66" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="572" y="52" text-anchor="middle" font-size="10" fill="#BE9349" font-family="ui-monospace, monospace">HALKA 3</text>
+          <text x="572" y="72" text-anchor="middle" font-size="12" fill="currentColor" font-weight="600">cloudflared</text>
+          <text x="572" y="89" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.75">tüneli yeniden kurar</text>
+
+          <line x1="662" y1="67" x2="702" y2="67" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar2)"/>
+          <text x="752" y="63" text-anchor="middle" font-size="12" fill="currentColor" font-weight="600">servis</text>
+          <text x="752" y="79" text-anchor="middle" font-size="12" fill="currentColor" font-weight="600">ayakta</text>
+        </svg>
+        <figcaption>
+          İkinci halka en kolay atlanandır ve sessizdir — eksikken ilk iki halka çalışır,
+          servis yine de ölü kalır.
+        </figcaption>
+      </figure>
+
+      <div class="why">
+        <span class="tag">Ölçülerek öğrenildi</span>
+        <p>
+          <code>restart: unless-stopped</code> yalnız konteyner <strong>çökerse</strong> devreye
+          girer — sanal makinenin kendisi yeniden başladığında değil. O işi
+          <code>podman-restart.service</code> yapar ve varsayılan olarak <strong>kapalıdır</strong>.
+        </p>
+        <p>
+          Üstelik iki tuzağı daha var: konteynerler <em>rootless</em> çalıştığı için servisi
+          <code>root</code> seviyesinde açmak işe yaramaz (root, kullanıcının konteynerlerini
+          hiç görmez); ve <em>linger</em> açılmazsa kullanıcının systemd yöneticisi açılışta
+          hiç başlamaz. Üçü de ilk tatbikatta ortaya çıktı: sanal makine yeniden başlatıldı ve
+          konteynerler geri gelmedi, servis iki dakika ölü kaldı.
+        </p>
+      </div>
+
+      <pre><code><span class="c"># Doğru kurulum (sanal makinenin İÇİNDE, kalıcı)</span>
+podman machine ssh <span class="s">'systemctl --user enable --now podman-restart.service'</span>
+podman machine ssh <span class="s">'sudo loginctl enable-linger core'</span>
+
+<span class="c"># Doğrulama iddiayla değil tatbikatla yapılır:</span>
+podman machine stop &amp;&amp; podman machine start
+<span class="c"># ...sonra ELLE HİÇBİR ŞEY YAPMADAN servisin dönmesini bekle. Ölçülen: ~18 sn.</span></code></pre>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 5 -->
+    <section id="yolculuk">
+      <p class="eyebrow">Akış</p>
+      <h2>Bir isteğin yolculuğu</h2>
+      <p>
+        <code>curl</code> komutundan JSON cevabına kadar istek hangi sınıflardan geçiyor?
+        Sıra önemli — her durak bir öncekinin geçmesine bağlı.
+      </p>
+
+      <figure>
+        <svg viewBox="0 0 760 470" role="img" aria-label="İstek sırayla correlation filtresi, güvenlik filtresi, controller, servis ve önbellekten geçer">
+          <defs>
+            <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- adimlar -->
+          <g font-size="11.5">
+            <rect x="180" y="14" width="290" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="325" y="34" text-anchor="middle" fill="currentColor" font-weight="600">CorrelationIdFilter</text>
+            <text x="325" y="50" text-anchor="middle" fill="currentColor" opacity="0.72" font-size="10.5">izleme kimliği üretir · loglara damgalar</text>
+
+            <rect x="180" y="86" width="290" height="58" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="325" y="106" text-anchor="middle" fill="currentColor" font-weight="600">ApiGuardFilter</text>
+            <text x="325" y="122" text-anchor="middle" fill="currentColor" opacity="0.72" font-size="10.5">anahtar geçerli mi → 401</text>
+            <text x="325" y="137" text-anchor="middle" fill="currentColor" opacity="0.72" font-size="10.5">kota doldu mu → 429</text>
+
+            <rect x="180" y="172" width="290" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="325" y="192" text-anchor="middle" fill="currentColor" font-weight="600">ExchangeRateController</text>
+            <text x="325" y="208" text-anchor="middle" fill="currentColor" opacity="0.72" font-size="10.5">symbols süzgeci · DTO'ya eşleme</text>
+
+            <rect x="180" y="244" width="290" height="44" rx="5" fill="none" stroke="#BE9349" stroke-width="2"/>
+            <text x="325" y="264" text-anchor="middle" fill="currentColor" font-weight="600">ExchangeRateService</text>
+            <text x="325" y="280" text-anchor="middle" fill="#BE9349" font-size="10.5">kararın verildiği TEK yer</text>
+
+            <rect x="30" y="330" width="200" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="130" y="350" text-anchor="middle" fill="currentColor" font-weight="600">RateCache</text>
+            <text x="130" y="366" text-anchor="middle" fill="currentColor" opacity="0.72" font-size="10.5">Redis · 15 dk tazelik</text>
+
+            <rect x="420" y="330" width="200" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <text x="520" y="350" text-anchor="middle" fill="currentColor" font-weight="600">TcmbProvider</text>
+            <text x="520" y="366" text-anchor="middle" fill="currentColor" opacity="0.72" font-size="10.5">HTTP → XML → domain</text>
+
+            <rect x="420" y="404" width="200" height="40" rx="5" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 3"/>
+            <text x="520" y="429" text-anchor="middle" fill="currentColor" opacity="0.8">tcmb.gov.tr</text>
+          </g>
+
+          <!-- dikey akis -->
+          <line x1="325" y1="58" x2="325" y2="84" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar3)"/>
+          <line x1="325" y1="144" x2="325" y2="170" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar3)"/>
+          <line x1="325" y1="216" x2="325" y2="242" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar3)"/>
+
+          <!-- servis -> cache -->
+          <path d="M250 288 L160 288 L160 328" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar3)"/>
+          <text x="150" y="310" text-anchor="end" font-size="10" fill="currentColor" opacity="0.75">① önce sor</text>
+
+          <!-- servis -> provider -->
+          <path d="M400 288 L490 288 L490 328" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#ar3)"/>
+          <text x="500" y="310" font-size="10" fill="currentColor" opacity="0.75">② bayatsa çek</text>
+
+          <line x1="520" y1="374" x2="520" y2="400" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar3)"/>
+
+          <!-- geri yazma -->
+          <path d="M420 352 L240 352" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#ar3)"/>
+          <text x="330" y="345" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.75">③ cache'e yaz</text>
+
+          <!-- giris -->
+          <text x="325" y="8" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.75" font-family="ui-monospace, monospace">GET /api/v1/rates</text>
+        </svg>
+        <figcaption>
+          Filtreler sırayla çalışır; hiçbiri geçmezse istek servise <em>hiç inmez</em>.
+          Kesikli oklar yalnız önbellek bayatken kullanılır.
+        </figcaption>
+      </figure>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Durak</th><th>Sorumluluğu</th><th>Reddederse</th></tr></thead>
+          <tbody>
+            <tr><td><code>CorrelationIdFilter</code></td><td>İzleme kimliğini okur ya da üretir, loglara damgalar, cevapta yankılar</td><td>—</td></tr>
+            <tr><td><code>ApiGuardFilter</code></td><td>Anahtarı doğrular, kota sayacını artırır, <code>X-RateLimit-*</code> başlıklarını koyar</td><td><code>401</code> / <code>429</code></td></tr>
+            <tr><td><code>ExchangeRateController</code></td><td>HTTP sözleşmesi: <code>symbols</code> süzgeci, DTO'ya eşleme, durum kodu</td><td><code>503</code> (kur yoksa)</td></tr>
+            <tr><td><code>ExchangeRateServiceImpl</code></td><td>Cache-aside merdiveni ve "son geçerli kur" kuralı</td><td>İstisna atmaz — durumu cevabın alanı yapar</td></tr>
+            <tr><td><code>RateCache</code></td><td>Kuru saklar/okur (Redis ya da bellek)</td><td>Hata yutar → miss sayılır</td></tr>
+            <tr><td><code>TcmbExchangeRateProvider</code></td><td>TCMB'ye HTTP isteği, XML okuma, domaine eşleme</td><td><code>ProviderUnavailableException</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 6 -->
+    <section id="onbellek">
+      <p class="eyebrow">Çekirdek kural</p>
+      <h2>15 dakika kuralı: TCMB'ye ne zaman gidilir</h2>
+      <p>
+        Servisin en çok sorulan davranışı bu. Kısaca: <strong>arka planda dönen bir zamanlayıcı
+        yok.</strong> TCMB'ye ancak <em>biri kur istediğinde</em> ve <em>eldeki kayıt 15
+        dakikadan eskiyse</em> gidilir. Hiç istek gelmezse TCMB'ye hiç gidilmez.
+      </p>
+
+      <figure>
+        <svg viewBox="0 0 720 300" role="img" aria-label="Önbellek merdiveni: taze kayıt varsa sağlayıcıya gidilmez, yoksa çekilir, çekilemezse son geçerli kur sunulur">
+          <defs>
+            <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- karar 1 -->
+          <rect x="20" y="20" width="230" height="48" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <text x="135" y="41" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">Cache'te kayıt var mı</text>
+          <text x="135" y="57" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">ve 15 dk'dan taze mi?</text>
+
+          <line x1="250" y1="44" x2="330" y2="44" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar4)"/>
+          <text x="290" y="36" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.8">evet</text>
+          <rect x="332" y="20" width="200" height="48" rx="5" fill="none" stroke="#BE9349" stroke-width="1.6"/>
+          <text x="432" y="41" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">FRESH_CACHE</text>
+          <text x="432" y="57" text-anchor="middle" font-size="10.5" fill="#BE9349">TCMB'ye HİÇ gidilmez</text>
+
+          <!-- hayir -->
+          <line x1="135" y1="68" x2="135" y2="98" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar4)"/>
+          <text x="146" y="88" font-size="10" fill="currentColor" opacity="0.8">hayır</text>
+
+          <rect x="20" y="100" width="230" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <text x="135" y="127" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">TCMB'ye git</text>
+
+          <line x1="250" y1="122" x2="330" y2="122" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar4)"/>
+          <text x="290" y="114" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.8">başarılı</text>
+          <rect x="332" y="100" width="200" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <text x="432" y="120" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">FRESH_PROVIDER</text>
+          <text x="432" y="135" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.75">cache'e yazılır</text>
+
+          <line x1="135" y1="144" x2="135" y2="174" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar4)"/>
+          <text x="146" y="164" font-size="10" fill="currentColor" opacity="0.8">düştü</text>
+
+          <rect x="20" y="176" width="230" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <text x="135" y="203" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">Eski kayıt duruyor mu?</text>
+
+          <line x1="250" y1="198" x2="330" y2="198" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar4)"/>
+          <text x="290" y="190" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.8">evet</text>
+          <rect x="332" y="176" width="200" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <text x="432" y="196" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">STALE_CACHE</text>
+          <text x="432" y="211" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.75">HTTP 200 · stale: true</text>
+
+          <line x1="135" y1="220" x2="135" y2="250" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar4)"/>
+          <text x="146" y="240" font-size="10" fill="currentColor" opacity="0.8">hayır</text>
+          <rect x="20" y="252" width="230" height="40" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/>
+          <text x="135" y="277" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">UNAVAILABLE → 503</text>
+
+          <text x="565" y="46" font-size="10.5" fill="currentColor" opacity="0.7">en sık yol</text>
+          <text x="565" y="204" font-size="10.5" fill="currentColor" opacity="0.7">hafta sonu</text>
+        </svg>
+        <figcaption>
+          Dört durumun tamamı cevapta <code>cache</code> alanı olarak görünür — tüketici hangi
+          basamakta olduğunu bilerek davranabilir.
+        </figcaption>
+      </figure>
+
+      <h3>Tazelik neye göre ölçülüyor</h3>
+      <p>
+        Tazelik <code>fetchedAt</code>'e (bizim çekme anımız) göre ölçülür,
+        <code>rateDate</code>'e (TCMB'nin yayın günü) göre değil.
+      </p>
+      <div class="why">
+        <span class="tag">Neden böyle</span>
+        <p>
+          Yayın gününe bağlansaydı: TCMB günde bir yayınladığı için kayıt <strong>yazıldığı gün
+          bitince</strong> bayat sayılırdı ve ertesi sabah her istek TCMB'ye giderdi. Daha
+          kötüsü, hafta sonu boyunca her istek <em>404 dönen</em> bir adrese giderdi — çünkü
+          TCMB o günlerde belge yayınlamaz.
+        </p>
+      </div>
+
+      <h3>İki pencere, iki farklı iş</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Ayar</th><th>Değer</th><th>Ne yapar</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>cache.ttl</code></td>
+              <td class="num">15 dk</td>
+              <td><strong>Tazelik.</strong> İçindeyken TCMB'ye hiç gidilmez</td>
+            </tr>
+            <tr>
+              <td><code>cache.retention</code></td>
+              <td class="num">7 gün</td>
+              <td><strong>Saklama.</strong> Tazelik dolsa da kayıt <em>silinmez</em>; "son
+                  geçerli kur" olarak durur</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Bu ayrım güvenlik ağıdır: 15 dakika dolduğunda kayıt silinseydi, TCMB'nin
+        erişilemediği ilk anda elimizde gösterecek hiçbir kur kalmazdı. 7 gün, en uzun tatil
+        zincirlerini rahatça kapsar.
+      </p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 7 -->
+    <section id="redis">
+      <p class="eyebrow">Veri katmanı</p>
+      <h2>Redis üç ayrı iş yapıyor</h2>
+      <p>
+        Redis burada tek bir "önbellek" değil; birbirinden bağımsız üç sorumluluğu var ve
+        her biri ayrı bir anahtar alanında yaşıyor.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>İş</th><th>Anahtar deseni</th><th>Sınıf</th><th>Arıza davranışı</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Kur önbelleği</td>
+              <td><code>currency:rates:tcmb</code></td>
+              <td><code>RateCache</code></td>
+              <td><span class="pill pill-good">fail-open</span></td>
+            </tr>
+            <tr>
+              <td>Kota sayacı</td>
+              <td><code>currency:ratelimit:&lt;kimlik&gt;:&lt;pencere&gt;</code></td>
+              <td><code>RateLimiter</code></td>
+              <td><span class="pill pill-good">fail-open</span></td>
+            </tr>
+            <tr>
+              <td>Anahtar deposu</td>
+              <td><code>currency:apikeys:id:</code> · <code>:byhash:</code> · <code>:index</code></td>
+              <td><code>ApiKeyStore</code></td>
+              <td><span class="pill pill-warn">fail-CLOSED</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Fail-open ile fail-closed farkı</h3>
+      <p>
+        Bu ayrım projenin en önemli tasarım kararı, o yüzden dikkatle:
+      </p>
+      <ul>
+        <li>
+          <strong>Fail-open</strong> — "arıza varsa geçir". Redis çökerse önbellek
+          <em>miss</em> sayılır, servis kuru sağlayıcıdan çeker; kota sayacı okunamazsa istek
+          geçer. Sebep: bunlar <em>yardımcı</em> bileşenler. Sayaç çalışmıyor diye kur sunabilen
+          bir servisi durdurmak, küçük bir arızayı tam kesintiye çevirmek olurdu.
+        </li>
+        <li>
+          <strong>Fail-closed</strong> — "doğrulayamıyorsam reddet". Redis çökerse dinamik
+          anahtarlar doğrulanamaz ve istek <code>401</code> alır.
+        </li>
+      </ul>
+      <div class="why">
+        <span class="tag">Neden tek istisna burada</span>
+        <p>
+          Önbellek ve sayaç için Redis bir <em>hızlandırıcıdır</em>; asıl işlev (kur sunmak)
+          o olmadan da yapılabilir. Ama anahtar deposu için Redis <strong>yetkilendirmenin
+          kaynağıdır</strong>. Orada fail-open demek "anahtarı doğrulayamıyorsam içeri al"
+          demektir — bu, asıl işlevi korumaz, yok eder.
+        </p>
+        <p>
+          Aynı ilkenin farklı uygulanışıdır: <em>altyapı arızası, sistemin ne yaptığını
+          sessizce değiştirmesin.</em> Bunun bedeli de belgelenmiştir — Redis kesintisinde
+          ayakta kalması gereken bir tüketiciye dinamik değil <strong>statik</strong> anahtar
+          verilir; statik anahtarlar bellekte durur, Redis'e hiç bağımlı değildir.
+        </p>
+      </div>
+
+      <h3>Neden Redis'e ihtiyaç var ki</h3>
+      <p>
+        Tek bir sunucu için bellekte tutmak yeterdi. Redis iki şey için gerekli:
+      </p>
+      <ol>
+        <li>
+          <strong>Paylaşılan durum.</strong> Aynı anda iki kopya çalışıyor (public + admin).
+          Kur bellekte tutulsaydı her kopya kendi kurunu çeker, TCMB isteği ikiye katlanır ve
+          iki kopya <em>farklı kur</em> döndürebilirdi. Kota da öyle: "dakikada 120" sınırı
+          pratikte 240 olurdu.
+        </li>
+        <li>
+          <strong>Kalıcılık.</strong> Redis <code>appendonly</code> ile diske yazar. Bellekte
+          tutulsaydı cumartesi günü bir yeniden başlatma 7 günlük güvenlik ağını silerdi ve
+          TCMB pazartesiye kadar yayın yapmadığı için servis <em>kursuz</em> kalırdı — ağın en
+          çok gerektiği anda.
+        </li>
+      </ol>
+      <p>
+        Yerel geliştirmede Redis gerekmez: <code>currency-api.cache.type=memory</code> (varsayılan)
+        ile aynı arayüzlerin bellek içi uygulamaları devreye girer. Aynı desen üç depoda da
+        tekrarlanır — bir arayüz, bir <code>InMemory*</code>, bir <code>Redis*</code>.
+      </p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 8 -->
+    <section id="tcmb">
+      <p class="eyebrow">Entegrasyon</p>
+      <h2>TCMB'nin üç tuzağı</h2>
+      <p>
+        TCMB'nin XML'i doğrudan kullanılamaz. Üç tuzağı var ve üçü de
+        <code>TcmbRateMapper</code> sınıfında, tek yerde biter.
+      </p>
+
+      <h3>1 · Kur yönü terstir</h3>
+      <p>
+        TCMB <code>1 USD = 47,73 TL</code> yayınlar; bizim sözleşmemiz <code>1 TL = 0,0209 USD</code>.
+        Çevirmezseniz tutarlar yaklaşık 2000 kat şişer.
+      </p>
+      <div class="why">
+        <span class="tag">Tehlikeli olan ne</span>
+        <p>
+          Bu hata <strong>sessizdir</strong>. 47,73 de geçerli bir pozitif kurdur; hiçbir
+          doğrulamaya, hiçbir tip kontrolüne takılmaz. Tek koruma testtir — bu yüzden yön
+          çevirme tek bir sınıfta yapılır ve o sınıfın testi projenin en kritik testidir.
+        </p>
+      </div>
+
+      <h3>2 · Birim her zaman 1 değil</h3>
+      <p>
+        Japon Yeni TCMB'de <strong>100 birim</strong> üzerinden yayınlanır. Hesaba katılmazsa
+        kur 100 kat yanlış olur. İkisi tek satırda çözülür:
+      </p>
+      <pre><code><span class="c">// TcmbRateMapper — yön çevirme ve birim düzeltmesi birlikte</span>
+<span class="k">1 TL</span> = Unit / ForexSelling
+
+<span class="c">// USD: Unit=1,   ForexSelling=47,7537  →  0,0209407857
+// JPY: Unit=100, ForexSelling=33,2650  →  3,0060...  (100 yen başına)</span></code></pre>
+
+      <h3>3 · Günlük yayın</h3>
+      <p>
+        Bülten gün içinde güncellenmez; hafta sonu ve resmî tatillerde <em>hiç yayınlanmaz</em>
+        (adres <code>404</code> döner). Bu bir arıza değil takvimdir, o yüzden ayrı bir sebep
+        olarak işaretlenir:
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Sebep</th><th>Ne demek</th><th>Log seviyesi</th></tr></thead>
+          <tbody>
+            <tr><td><code>NOT_PUBLISHED</code></td><td>Belge yok — hafta sonu/tatil</td><td><code>INFO</code> — beklenen</td></tr>
+            <tr><td><code>TRANSPORT</code></td><td>Ağ/HTTP hatası, bağlantı reddi, 5xx</td><td><code>WARN</code></td></tr>
+            <tr><td><code>TIMEOUT</code></td><td>Zaman aşımı</td><td><code>WARN</code></td></tr>
+            <tr><td><code>INVALID_PAYLOAD</code></td><td>Cevap geldi ama okunamadı</td><td><code>WARN</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Ayrım pratik bir sebeple var: her cumartesi <code>WARN</code> üreten bir sistem, gerçek
+        bir kesinti olduğunda da görünmez olur — kimse alarmlara bakmaz hale gelir.
+      </p>
+
+      <h3>Güvenlik: XML nasıl okunuyor</h3>
+      <p>
+        XML dış dünyadan gelir, dolayısıyla ayrıştırıcı güvenli kurulur
+        (<code>SecureXml</code>): DOCTYPE tamamen reddedilir, harici varlık çözümü kapatılır.
+        Aksi hâlde araya giren biri <code>&lt;!ENTITY xxe SYSTEM "file:///etc/passwd"&gt;</code>
+        göndererek sunucunun dosyalarını okutabilirdi — istek <em>bizim</em> sunucumuzdan
+        çıktığı için ağ sınırı bu saldırıyı engellemez.
+      </p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 9 -->
+    <section id="katmanlar">
+      <p class="eyebrow">Kod düzeni</p>
+      <h2>Katmanlar ve sınıflar</h2>
+      <p>
+        Paket düzeni rastgele değil; her katmanın tek bir sorumluluğu var ve bağımlılıklar tek
+        yönde akar.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Paket</th><th>İçindekiler</th><th>Kural</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>api/</code></td>
+              <td>Filtreler, controller'lar, DTO'lar</td>
+              <td>HTTP sözleşmesi burada başlar ve biter</td>
+            </tr>
+            <tr>
+              <td><code>business/</code></td>
+              <td><code>abstracts/</code> (arayüz) + <code>concretes/</code> (uygulama)</td>
+              <td>Kullanım senaryoları; HTTP'yi bilmez</td>
+            </tr>
+            <tr>
+              <td><code>core/integrations/</code></td>
+              <td><code>ExchangeRateProvider</code> soyutlaması + <code>tcmb/</code></td>
+              <td>Satıcıya özgü <em>her şey</em> kendi paketinde kalır</td>
+            </tr>
+            <tr>
+              <td><code>core/utilities/</code></td>
+              <td><code>SecureXml</code>, <code>ApiKeyHasher</code></td>
+              <td>Durumsuz yardımcılar</td>
+            </tr>
+            <tr>
+              <td><code>dataAccess/</code></td>
+              <td><code>RateCache</code> · <code>RateLimiter</code> · <code>ApiKeyStore</code></td>
+              <td>Her biri <code>InMemory*</code> + <code>Redis*</code> çiftli</td>
+            </tr>
+            <tr>
+              <td><code>entities/</code></td>
+              <td><code>ExchangeRateSnapshot</code>, <code>ApiKeyRecord</code>, <code>CurrencyCode</code></td>
+              <td>Domain modeli — hiçbir satıcının tel formatı değil</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="why">
+        <span class="tag">En önemli kural</span>
+        <p>
+          <strong>Satıcının tel formatı kendi paketinden çıkmaz.</strong> TCMB'nin XML alan
+          adları <code>core/integrations/tcmb/dtos</code> içinde kalır; domaine yalnızca
+          mapper aracılığıyla girer. Bunun karşılığı şudur: yarın ECB eklenirse yalnız
+          <code>core/integrations/ecb/</code> yazılır — API sözleşmesi, önbellek ve iş katmanı
+          <em>hiç değişmez</em>.
+        </p>
+      </div>
+
+      <h3>Neden zincirin her adımı ayrı sınıfta</h3>
+      <p>
+        <code>TcmbExchangeRateProvider</code> (HTTP) → <code>TcmbXmlReader</code> (XML → DTO) →
+        <code>TcmbRateMapper</code> (DTO → domain). Bölünmelerinin sebebi, her adımın
+        <em>ayrı bir sebeple</em> bozulması: "satıcıya ulaşamadık", "belgeyi okuyamadık",
+        "kuru çeviremedik" farklı arızalardır, farklı yerlerde aranır ve ayrı ayrı test edilir.
+      </p>
+
+      <h3>Test yaklaşımı</h3>
+      <p>
+        127 backend testinin tamamı <strong>altyapısızdır</strong> — Redis de ağ da gerekmez.
+        Saat enjekte edilir (<code>Clock</code>), böylece 15 dakikalık pencere gerçekten
+        beklemeden sınanır. Redis destekli sınıflar da bu kurala uyar:
+        <code>StringRedisTemplate</code> taklit edilir, çünkü sınanan şey Redis'in çalışıp
+        çalışmadığı değil <em>bizim kararlarımızdır</em> — anahtar düzeni, tarama yapılmaması,
+        fail-open/fail-closed ayrımı.
+      </p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 10 -->
+    <section id="anahtarlar">
+      <p class="eyebrow">Kimlik</p>
+      <h2>API anahtarları nasıl çalışıyor</h2>
+      <p>
+        Servis ticari bir API gibi davranır: her istek <code>X-API-Key</code> başlığı ister ve
+        her tüketicinin dakikalık bir kotası vardır. İki tür anahtar var.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th></th><th>Statik</th><th>Dinamik</th></tr></thead>
+          <tbody>
+            <tr><td>Nereden gelir</td><td><code>.env</code> → <code>CURRENCY_API_KEYS</code></td><td>Admin panelinden oluşturulur</td></tr>
+            <tr><td>Nerede durur</td><td>Bellekte (açılışta okunur)</td><td>Redis'te, yalnız özeti</td></tr>
+            <tr><td>Değiştirmek için</td><td>Servisi yeniden başlatmak gerekir</td><td>Anında, restart yok</td></tr>
+            <tr><td>İptal edilebilir mi</td><td>Hayır (dosyadan silip restart)</td><td>Evet, tek tıkla</td></tr>
+            <tr><td>Redis çökerse</td><td><span class="pill pill-good">çalışmaya devam eder</span></td><td><span class="pill pill-warn">401 alır</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Anahtar nasıl saklanıyor</h3>
+      <p>
+        Ham anahtar <strong>hiçbir yerde saklanmaz</strong>. Oluşturulduğu anda cevapta bir kez
+        gösterilir; depoya yalnız SHA-256 özeti ve maskeli bir önizleme
+        (<code>cur_Ta7a…mpFc</code>) yazılır. İstek geldiğinde gelen anahtarın özeti alınır ve
+        özetle eşleşme aranır.
+      </p>
+      <div class="why">
+        <span class="tag">Neden bcrypt değil SHA-256</span>
+        <p>
+          Yavaş özet fonksiyonları (bcrypt, Argon2) <em>düşük entropili, insan seçimi</em>
+          sırları — yani parolaları — çevrimdışı kaba kuvvete karşı yavaşlatmak için vardır.
+          Buradaki anahtar 256 bitlik rastgele bir değerdir; kaba kuvvetle bulunması zaten
+          hesaplanamaz. Yavaş bir fonksiyon saldırgana hiçbir engel eklemeden <em>her isteğe</em>
+          gereksiz CPU maliyeti bindirirdi. GitHub ve Stripe da token'larını aynı gerekçeyle
+          SHA-256 ile özetler.
+        </p>
+      </div>
+
+      <h3>Kota nasıl sayılıyor</h3>
+      <p>
+        Sabit pencere sayacı: her istekte Redis'te <code>INCR</code>, ilk artışta bir
+        <code>EXPIRE</code>. Anahtar hem kimliği hem pencere numarasını taşır
+        (<code>currency:ratelimit:crm:29372145</code>), böylece pencere değişince sayaç
+        kendiliğinden sıfırlanır.
+      </p>
+      <p>
+        TTL <em>yalnız ilk artışta</em> kurulur — her artışta kurulsaydı pencere sürekli ileri
+        kayar ve kota hiç dolmazdı. Kota aşılırsa <code>429</code> ve ne zaman tekrar
+        denenebileceğini söyleyen <code>Retry-After</code> döner; tüketici tahmin etmek zorunda
+        kalmaz.
+      </p>
+      <p>
+        Her anahtarın kendi limiti olabilir (panelden düzenlenir). Limit değiştirmek
+        <strong>anahtarı değiştirmez</strong> — tüketicinin elindeki değer çalışmaya devam eder.
+        Aksi hâlde her kota ayarı, herkese yeni anahtar dağıtmayı gerektirirdi.
+      </p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 11 -->
+    <section id="sinirlar">
+      <p class="eyebrow">Güvenlik</p>
+      <h2>Üç yüzey, üç ayrı sınır</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Yüzey</th><th>Port</th><th>Sınır</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Tüketici API'si</td>
+              <td class="num">8095</td>
+              <td>İnternete açık; <code>X-API-Key</code> ister</td>
+            </tr>
+            <tr>
+              <td>Tanıtım sayfası + önizleme</td>
+              <td class="num">8095</td>
+              <td>Anahtarsız — ama kota IP başına uygulanır</td>
+            </tr>
+            <tr>
+              <td>Admin API'si</td>
+              <td class="num">8097</td>
+              <td>Yalnız <code>127.0.0.1</code>; ayrıca <code>X-Admin-Token</code></td>
+            </tr>
+            <tr>
+              <td>Admin paneli</td>
+              <td class="num">8096</td>
+              <td>Yalnız <code>127.0.0.1</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="why">
+        <span class="tag">Neden ayrı port, neden path filtresi değil</span>
+        <p>
+          Tünel <strong>path değil TÜM portu</strong> taşır. Admin uçları 8095'te durup bir
+          path kuralıyla "gizlenseydi", tünel yine de o porta gelen her isteği içeri alırdı —
+          gizleme bir yanılsama olurdu. Ayrı port <em>yapısal</em> bir sınırdır: tünelin
+          yapılandırmasına yazılmayan bir porta internetten ulaşmanın yolu yoktur.
+        </p>
+        <p>
+          Token kontrolü bunun <em>üzerine</em> ikinci katmandır, tek başına sınır değildir.
+        </p>
+      </div>
+
+      <h3>Neden yalnız loopback</h3>
+      <p>
+        Admin portları önce tüm ağ arayüzlerine bağlıydı; gerekçe "aynı ağdan da yönetebileyim"di.
+        Ama bu <strong>sabit bir ev ağı varsayımıydı</strong> — oysa bu bir dizüstü. Kafede,
+        otelde ya da okulda bir Wi-Fi'a bağlandığı anda yönetim paneli o ağdaki herkese
+        açılırdı; üstelik yönetim token'ı yerel ağda düz HTTP ile gider (tünel yalnız 8095'i
+        şifreler). Başka bir cihazdan yönetmek gerekirse SSH tüneli kullanılır.
+      </p>
+
+      <h3>Kapalıyken 404, 401 değil</h3>
+      <p>
+        Yönetim yüzeyi kapalı bir kurulumda <code>/admin/**</code> <strong>404</strong> döner.
+        <code>401</code> dönseydi "burada bir yönetim yüzeyi var ama token'ın yanlış" demiş
+        olurdu — yani o yüzeyin <em>varlığını</em> doğrulardı. Kapalı bir kurulumda o yüzey
+        gerçekten yoktur; cevabı da öyle olmalıdır.
+      </p>
+
+      <h3>Simülatör varsayılan kapalı</h3>
+      <p>
+        Projede tüketici testleri için sahte bir satıcı yüzü ve "kaos" uçları
+        (<code>/__mode</code>, <code>/__settings</code>) var. Bunlar kimlik doğrulaması
+        <em>istemez</em> (kaosu süren duman testinin elinde anahtar yoktur) ve durum
+        <em>değiştirir</em>. İnternete açık bir serviste bu ikisi bir arada, uzaktan
+        erişilebilir bir arıza düğmesidir — bu yüzden yalnız açıkça istendiğinde vardır,
+        yoksa o yollar 404'tür.
+      </p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 12 -->
+    <section id="isletim">
+      <p class="eyebrow">Pratik</p>
+      <h2>Günlük işletim</h2>
+
+      <h3>Çalıştırma</h3>
+      <pre><code><span class="c"># Tüm yığın (redis + api + admin api + panel)</span>
+podman compose up -d --build
+
+<span class="c"># Yalnız uygulama, Redis'siz — bellek içi depolar devreye girer</span>
+mvn spring-boot:run
+
+<span class="c"># Testler</span>
+mvn test                                   <span class="c"># 127 backend</span>
+cd admin-ui &amp;&amp; npx ng test --watch=false   <span class="c"># 25 arayüz</span></code></pre>
+
+      <h3>İşletim betikleri</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Betik</th><th>Ne yapar</th><th>Ne zaman</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>ops/healthcheck.sh</code></td>
+              <td>Zinciri <em>public adres üzerinden</em> kontrol eder; durum değişince bildirir</td>
+              <td>5 dakikada bir</td>
+            </tr>
+            <tr>
+              <td><code>ops/backup-redis.sh</code></td>
+              <td>Anahtarların ve kur ağının yedeği (son 14 kopya)</td>
+              <td>Her gece 03:30</td>
+            </tr>
+            <tr>
+              <td><code>ops/rotate-logs.sh</code></td>
+              <td>10 MB'ı aşan logları döndürür</td>
+              <td>Sağlık kontrolüyle birlikte</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="why">
+        <span class="tag">Sağlık kontrolü neden dışarıdan</span>
+        <p>
+          Konteynerin kendi kontrolü yalnız süreci görür. Tünel düşerse ya da servis "ayakta
+          ama kur veremez" hâle gelirse konteyner <em>sağlıklı</em> görünmeye devam eder —
+          oysa dışarıdaki tüketici için servis yoktur. Bu yüzden kontrol, tüketicinin gördüğü
+          yerden yapılır.
+        </p>
+      </div>
+
+      <h3>Yedek neden kritik</h3>
+      <p>
+        Dağıtılmış anahtarların özetleri ve 7 günlük kur ağı yalnız Redis'in disk alanında
+        yaşar. O alan kaybolursa <strong>tüketicilere verilmiş tüm anahtarlar</strong> bir anda
+        çalışmaz olur — ve ham anahtarlar tasarım gereği hiçbir yerde saklanmadığı için geri
+        getirilemez. Yedek bu yüzden bir tercih değil zorunluluktur.
+      </p>
+
+      <h3>Tüketiciyi bağlamak</h3>
+      <pre><code><span class="c"># Tüketici tarafında (CRM) kod değişmez, yalnız üç değişken:</span>
+CRM_CURRENCY_PROVIDER=currencyapi
+CRM_CURRENCY_CURRENCYAPI_BASE_URL=https://kur.etiyapi.com
+CRM_CURRENCY_CURRENCYAPI_API_KEY=cur_...   <span class="c"># panelden üretilen anahtar</span></code></pre>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 13 -->
+    <section id="sozluk">
+      <p class="eyebrow">Ek</p>
+      <h2>Sözlük</h2>
+      <dl class="glossary">
+        <div>
+          <dt>cache-aside</dt>
+          <dd>Uygulamanın önce önbelleğe sorup, bulamazsa kaynağa gitmesi ve dönen sonucu
+              önbelleğe yazması. Önbellek kendi kendini doldurmaz; kararı uygulama verir.</dd>
+        </div>
+        <div>
+          <dt>fail-open / fail-closed</dt>
+          <dd>Bir bileşen arızalandığında istek <em>geçer</em> mi (open) yoksa <em>reddedilir</em>
+              mi (closed). Yardımcı bileşenler için open, yetkilendirme için closed doğrudur.</dd>
+        </div>
+        <div>
+          <dt>stale (bayat)</dt>
+          <dd>Tazelik penceresi dolmuş ama hâlâ elde olan kayıt. Bu servis bayat kuru
+              <code>200</code> ile döner ve <code>stale: true</code> ile işaretler — veri
+              varken tüketiciyi hataya düşürmek yanlış olurdu.</dd>
+        </div>
+        <div>
+          <dt>tünel (reverse tunnel)</dt>
+          <dd>İçerideki makinenin dışarıya bağlanıp o hattı açık tutması; dışarıdan gelen
+              istekler o hattan içeri iletilir. Port yönlendirme gerektirmez.</dd>
+        </div>
+        <div>
+          <dt>CGNAT</dt>
+          <dd>Servis sağlayıcının birçok aboneyi tek genel IP'nin arkasına koyması. Bu durumda
+              evinizin dışarıdan erişilebilir bir adresi <em>yoktur</em>; tünel bunu aşar.</dd>
+        </div>
+        <div>
+          <dt>rootless konteyner</dt>
+          <dd>Konteynerlerin <code>root</code> yerine normal bir kullanıcı hesabında çalışması.
+              Güvenlidir ama <code>root</code> seviyesindeki servisler bu konteynerleri
+              <em>göremez</em> — açılışta geri getirme ayarı bu yüzden kullanıcı seviyesinde
+              yapılmalıdır.</dd>
+        </div>
+        <div>
+          <dt>linger</dt>
+          <dd>Bir kullanıcının systemd servislerinin, o kullanıcı oturum açmasa bile
+              çalışmasına izin veren ayar. Sanal makinede kimse oturum açmadığı için şart.</dd>
+        </div>
+        <div>
+          <dt>MDC</dt>
+          <dd>Günlük kaydı kütüphanesinin, o isteğe ait bilgileri (ör. izleme kimliği) her log
+              satırına otomatik eklemesini sağlayan bağlam. İş parçacığına bağlıdır, bu yüzden
+              istek bitince temizlenmelidir.</dd>
+        </div>
+        <div>
+          <dt>sabit pencere (fixed window)</dt>
+          <dd>Kotanın, saati eşit dilimlere bölüp her dilimde sayaç tutarak uygulanması.
+              Basittir; bilinen zayıflığı iki dilimin sınırında kısa süreli iki katı yüktür.</dd>
+        </div>
+        <div>
+          <dt>XXE</dt>
+          <dd>XML'in "harici varlık" özelliğinin kötüye kullanılarak sunucudaki dosyaların
+              okutulması. Ayrıştırıcıda DOCTYPE'ı tamamen reddederek yapısal olarak engellenir.</dd>
+        </div>
+      </dl>
+    </section>
+
+  </main>
+
+  <footer>
+    Pair 3 Kur Servisi · currency-api — TCMB kur mikroservisi.
+    Bu belge kodun kendisinden türetilmiştir; davranış değişirse belge de değişmelidir.
+  </footer>
+
+</div>
+</body>
+</html>
