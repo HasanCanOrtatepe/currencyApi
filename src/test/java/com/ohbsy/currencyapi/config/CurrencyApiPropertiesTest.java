@@ -102,12 +102,26 @@ class CurrencyApiPropertiesTest {
     }
 
     @Test
-    @DisplayName("admin varsayılanları: kapalı, boş token, 8097")
+    @DisplayName("admin varsayılanları: kapalı, boş token, 8097, cors deseni http://*:8096")
     void adminDefaults() {
         CurrencyApiProperties properties = new CurrencyApiProperties();
 
         assertThat(properties.getAdmin().isEnabled()).isFalse();
         assertThat(properties.getAdmin().getToken()).isEmpty();
         assertThat(properties.getAdmin().getPort()).isEqualTo(8097);
+        assertThat(properties.getAdmin().getCorsOriginPattern()).isEqualTo("http://*:8096");
+    }
+
+    /**
+     * Desen host'u serbest bırakır (LAN'daki herhangi bir cihaz), yalnız admin-ui'nin portunu
+     * sabit tutar — bkz. {@code CurrencyApiProperties.Admin.corsOriginPattern} sınıf yorumu.
+     */
+    @Test
+    @DisplayName("cors-origin-pattern ortamdan bağlanır")
+    void corsOriginPatternBindsFromEnvironment() {
+        CurrencyApiProperties properties = bind(Map.of(
+                "currency-api.admin.cors-origin-pattern", "http://*:9999"));
+
+        assertThat(properties.getAdmin().getCorsOriginPattern()).isEqualTo("http://*:9999");
     }
 }
