@@ -21,7 +21,7 @@ Kullanıcıya görünen ürün adı **Pair 3 Kur Servisi**'dir (tanıtım sayfas
 ## Komutlar
 
 ```bash
-mvn test                       # 127 birim testi — ALTYAPISIZ (Redis/ağ gerekmez)
+mvn test                       # 131 birim testi — ALTYAPISIZ (Redis/ağ gerekmez)
 mvn spring-boot:run            # http://localhost:8095
 podman compose up -d --build   # tam yığın: redis + api + admin api + admin panel
 

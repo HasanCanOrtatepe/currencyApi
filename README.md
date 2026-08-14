@@ -366,7 +366,7 @@ değil **test edilebilirliğin** parçasıdır.
 ## Test
 
 ```bash
-mvn test                                   # 127 test — backend
+mvn test                                   # 131 test — backend
 cd admin-ui && npx ng test --watch=false   # 25 test — admin paneli
 ```
 
