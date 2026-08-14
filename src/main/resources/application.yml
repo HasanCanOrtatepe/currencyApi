@@ -29,6 +29,22 @@ currency-api:
     base-url: ${TCMB_BASE_URL:https://www.tcmb.gov.tr}
     connect-timeout: 5s
     read-timeout: 10s
+  evds:
+    # TCMB'nin veri dağıtım sistemi — zincirin İLK basamağı (bkz. ChainedExchangeRateProvider).
+    # today.xml ile AYNI kurumun AYNI resmî satış kurudur; farkı, her satırı kendi günüyle
+    # vermesidir. today.xml'in Tarih özniteliği bir gün geriden gelir ve "elimizdeki kur
+    # bugünün mü" sorusu onunla cevaplanamaz.
+    base-url: ${CURRENCY_EVDS_BASE_URL:https://evds3.tcmb.gov.tr}
+    # ANAHTAR AYNI ZAMANDA DÜĞMEDİR: boşsa EVDS zincire hiç girmez ve servis bugünkü
+    # davranışını (yalnız today.xml) aynen sürdürür. Ayrı bir enabled bayrağı YOKTUR —
+    # "açık ama anahtarsız" diye çelişkili bir yapılandırma kurulamasın diye.
+    # DEĞER YALNIZ ORTAM DEĞİŞKENİNDEN gelir; buraya yazmak onu depoya sokmaktır.
+    key: ${CURRENCY_EVDS_KEY:}
+    # Tek gün değil ARALIK sorulur, en yeni DOLU gün seçilir: hafta sonu ve tatillerde EVDS
+    # satırı verir ama değerleri boştur. 10 gün en uzun bayram zincirini kapsar.
+    lookback: 10d
+    connect-timeout: 5s
+    read-timeout: 10s
   auth:
     # Varsayılan KAPALI: açık gelseydi anahtar tanımlamamış her kurulum bir anda 401 alırdı.
     # Açıldığında anahtarsız istek kesinlikle reddedilir; anahtar tanımlı değilse servis

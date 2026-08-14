@@ -20,6 +20,7 @@ public class CurrencyApiProperties {
 
     private final Cache cache = new Cache();
     private final Tcmb tcmb = new Tcmb();
+    private final Evds evds = new Evds();
     private final Auth auth = new Auth();
     private final RateLimit rateLimit = new RateLimit();
     private final Admin admin = new Admin();
@@ -31,6 +32,10 @@ public class CurrencyApiProperties {
 
     public Tcmb getTcmb() {
         return tcmb;
+    }
+
+    public Evds getEvds() {
+        return evds;
     }
 
     public Auth getAuth() {
@@ -245,6 +250,85 @@ public class CurrencyApiProperties {
             if (baseUrl != null && !baseUrl.isBlank()) {
                 this.baseUrl = baseUrl.trim();
             }
+        }
+
+        public Duration getConnectTimeout() {
+            return connectTimeout;
+        }
+
+        public void setConnectTimeout(Duration connectTimeout) {
+            this.connectTimeout = connectTimeout;
+        }
+
+        public Duration getReadTimeout() {
+            return readTimeout;
+        }
+
+        public void setReadTimeout(Duration readTimeout) {
+            this.readTimeout = readTimeout;
+        }
+    }
+
+    /**
+     * EVDS sağlayıcısının ayarları — TCMB'nin veri dağıtım sistemi.
+     *
+     * <p><b>{@link #key} tek anahtardır ve aynı zamanda AÇMA/KAPAMA düğmesidir:</b> boşsa
+     * sağlayıcı zincire hiç girmez ve servis anahtarsız kurulumdaki davranışını aynen sürdürür
+     * ({@code today.xml}). Ayrı bir {@code enabled} bayrağı bilinçli olarak YOKTUR — iki
+     * düğmenin çelişebildiği bir yapılandırma ("açık ama anahtarsız") sessiz bir arıza
+     * kaynağıdır; burada çelişki kurulamaz.
+     *
+     * <p><b>Anahtar depoya girmez</b> — yalnız ortam değişkeninden ({@code .env}). EVDS onu
+     * HTTP <b>başlığında</b> beklediği için URL'lerde de görünmez; log ve stack trace'lerde
+     * URL basmak güvenlidir.
+     */
+    public static class Evds {
+
+        private String baseUrl = "https://evds3.tcmb.gov.tr";
+
+        /** {@code key} başlığıyla gönderilir. Boş = sağlayıcı devre dışı. */
+        private String key = "";
+
+        /**
+         * Kaç günlük geriye bakılacağı. Tek gün sorulsaydı hafta sonu, resmî tatil ve
+         * bültenin henüz yayınlanmadığı sabah saatlerinde cevap boş dönerdi; en yeni
+         * <b>dolu</b> gün seçilir. 10 gün, en uzun bayram zincirini kapsar.
+         */
+        private Duration lookback = Duration.ofDays(10);
+
+        private Duration connectTimeout = Duration.ofSeconds(5);
+        private Duration readTimeout = Duration.ofSeconds(10);
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        /** Boş değer varsayılanı EZMEZ — {@link Tcmb#setBaseUrl} ile aynı konteyner tuzağı. */
+        public void setBaseUrl(String baseUrl) {
+            if (baseUrl != null && !baseUrl.isBlank()) {
+                this.baseUrl = baseUrl.trim();
+            }
+        }
+
+        public String getKey() {
+            return key;
+        }
+
+        /**
+         * Yer tutucu değerler ({@code __unset__} gibi) elenir: {@code .env} doldurulmadığında
+         * servis, geçersiz bir anahtarla her 15 dakikada bir EVDS'ten 401 toplamamalıdır.
+         */
+        public void setKey(String key) {
+            String trimmed = key == null ? "" : key.trim();
+            this.key = trimmed.startsWith("__") ? "" : trimmed;
+        }
+
+        public Duration getLookback() {
+            return lookback;
+        }
+
+        public void setLookback(Duration lookback) {
+            this.lookback = lookback;
         }
 
         public Duration getConnectTimeout() {

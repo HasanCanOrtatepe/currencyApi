@@ -402,6 +402,7 @@
       <li><a href="#onbellek">15 dakika kuralı</a></li>
       <li><a href="#redis">Redis üç ayrı iş yapıyor</a></li>
       <li><a href="#tcmb">TCMB'nin üç tuzağı</a></li>
+      <li><a href="#zincir">İki kapı: sağlayıcı zinciri</a></li>
       <li><a href="#katmanlar">Katmanlar ve sınıflar</a></li>
       <li><a href="#anahtarlar">API anahtarları</a></li>
       <li><a href="#sinirlar">Üç yüzey, üç sınır</a></li>
@@ -865,6 +866,8 @@ podman machine stop &amp;&amp; podman machine start
             <tr><td><code>ExchangeRateController</code></td><td>HTTP sözleşmesi: <code>symbols</code> süzgeci, DTO'ya eşleme, durum kodu</td><td><code>503</code> (kur yoksa)</td></tr>
             <tr><td><code>ExchangeRateServiceImpl</code></td><td>Cache-aside merdiveni ve "son geçerli kur" kuralı</td><td>İstisna atmaz — durumu cevabın alanı yapar</td></tr>
             <tr><td><code>RateCache</code></td><td>Kuru saklar/okur (Redis ya da bellek)</td><td>Hata yutar → miss sayılır</td></tr>
+            <tr><td><code>ChainedExchangeRateProvider</code></td><td>Kaynakları sırayla dener: EVDS → <code>today.xml</code></td><td>Hepsi düşerse <code>ProviderUnavailableException</code></td></tr>
+            <tr><td><code>EvdsExchangeRateProvider</code></td><td>EVDS'e HTTP isteği, JSON okuma, domaine eşleme</td><td><code>ProviderUnavailableException</code></td></tr>
             <tr><td><code>TcmbExchangeRateProvider</code></td><td>TCMB'ye HTTP isteği, XML okuma, domaine eşleme</td><td><code>ProviderUnavailableException</code></td></tr>
           </tbody>
         </table>
@@ -1120,6 +1123,7 @@ podman machine stop &amp;&amp; podman machine start
             <tr><td><code>TRANSPORT</code></td><td>Ağ/HTTP hatası, bağlantı reddi, 5xx</td><td><code>WARN</code></td></tr>
             <tr><td><code>TIMEOUT</code></td><td>Zaman aşımı</td><td><code>WARN</code></td></tr>
             <tr><td><code>INVALID_PAYLOAD</code></td><td>Cevap geldi ama okunamadı</td><td><code>WARN</code></td></tr>
+            <tr><td><code>UNAUTHORIZED</code></td><td>Anahtar yok/yanlış/süresi dolmuş</td><td><code>WARN</code> — <strong>kendiliğinden düzelmez</strong></td></tr>
           </tbody>
         </table>
       </div>
@@ -1136,6 +1140,165 @@ podman machine stop &amp;&amp; podman machine start
         göndererek sunucunun dosyalarını okutabilirdi — istek <em>bizim</em> sunucumuzdan
         çıktığı için ağ sınırı bu saldırıyı engellemez.
       </p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════ 8b -->
+    <section id="zincir">
+      <p class="eyebrow">Entegrasyon</p>
+      <h2>İki kapı, tek kurum: sağlayıcı zinciri</h2>
+      <p>
+        Servis TCMB'ye <strong>iki ayrı kapıdan</strong> girer ve sırayla dener: ilki çalışırsa
+        ikincisine hiç gidilmez. İkisi de aynı kurumun aynı resmî satış kurudur —
+        <em>rakamları birebir aynıdır</em>. O hâlde neden iki tane?
+      </p>
+
+      <div class="why">
+        <span class="tag">Çözdüğü gerçek sorun</span>
+        <p>
+          14 Ağustos sabahı sitede "13.08" yazıyordu. Sebep servisin geç kalması değildi:
+          <code>today.xml</code> belgesinin <strong>tarih etiketi bir gün geriden gelir</strong>.
+          O gün yayınlanan belge "13.08.2026" diyordu ama içindeki sayılar
+          (USD&nbsp;47,7717) EVDS'in <strong>14-08</strong>'e yazdığı sayılardı. Yani kur
+          doğruydu, <em>tarih</em> yanlıştı — ve "elimizdeki kur bugünün mü" sorusu
+          <code>today.xml</code>'e bakarak <strong>cevaplanamıyordu</strong>.
+        </p>
+      </div>
+
+      <figure>
+        <svg viewBox="0 0 720 372" role="img" aria-label="Sağlayıcı zinciri: saatlik kaynak yoktur, önce EVDS denenir, düşerse today.xml, o da düşerse cache'teki son geçerli kur, hiçbiri yoksa 503">
+          <defs>
+            <marker id="ar9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- 1 · saatlik: YOK -->
+          <rect x="20" y="16" width="250" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.55"/>
+          <text x="145" y="34" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600" opacity="0.6">1 · Saatlik kur</text>
+          <text x="145" y="50" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.6">BÖYLE BİR KAYNAK YOK</text>
+          <text x="330" y="42" font-size="10.5" fill="currentColor" opacity="0.65">671 veri grubu tarandı — en sık frekans GÜNLÜK</text>
+
+          <line x1="145" y1="60" x2="145" y2="88" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar9)"/>
+          <text x="156" y="79" font-size="10" fill="currentColor" opacity="0.8">atlanır</text>
+
+          <!-- 2 · EVDS -->
+          <rect x="20" y="90" width="250" height="44" rx="5" fill="none" stroke="#BE9349" stroke-width="1.6"/>
+          <text x="145" y="108" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">2 · EVDS</text>
+          <text x="145" y="124" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.75">TP.DK.USD.S · JSON</text>
+          <line x1="270" y1="112" x2="336" y2="112" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar9)"/>
+          <text x="303" y="104" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.8">olur</text>
+          <rect x="338" y="90" width="220" height="44" rx="5" fill="none" stroke="#BE9349" stroke-width="1.6"/>
+          <text x="448" y="108" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">rateDate = BUGÜN</text>
+          <text x="448" y="124" text-anchor="middle" font-size="10.5" fill="#BE9349">en sık yol</text>
+
+          <line x1="145" y1="134" x2="145" y2="162" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar9)"/>
+          <text x="156" y="153" font-size="10" fill="currentColor" opacity="0.8">anahtar yok · düştü</text>
+
+          <!-- 3 · today.xml -->
+          <rect x="20" y="164" width="250" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <text x="145" y="182" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">3 · today.xml</text>
+          <text x="145" y="198" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.75">anahtar İSTEMEZ</text>
+          <line x1="270" y1="186" x2="336" y2="186" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar9)"/>
+          <text x="303" y="178" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.8">olur</text>
+          <rect x="338" y="164" width="220" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <text x="448" y="182" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">aynı sayılar</text>
+          <text x="448" y="198" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.75">tarih bir gün geriden</text>
+
+          <line x1="145" y1="208" x2="145" y2="236" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar9)"/>
+          <text x="156" y="227" font-size="10" fill="currentColor" opacity="0.8">düştü</text>
+
+          <!-- 4 · cache -->
+          <rect x="20" y="238" width="250" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <text x="145" y="256" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">4 · Cache'teki son kayıt</text>
+          <text x="145" y="272" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.75">zincirde değil, servis katmanında</text>
+          <line x1="270" y1="260" x2="336" y2="260" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar9)"/>
+          <text x="303" y="252" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.8">var</text>
+          <rect x="338" y="238" width="220" height="44" rx="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <text x="448" y="256" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">STALE_CACHE · 200</text>
+          <text x="448" y="272" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.75">dünkü / son geçerli kur</text>
+
+          <line x1="145" y1="282" x2="145" y2="310" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar9)"/>
+          <text x="156" y="301" font-size="10" fill="currentColor" opacity="0.8">cache de boş</text>
+
+          <rect x="20" y="312" width="250" height="40" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/>
+          <text x="145" y="337" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">UNAVAILABLE → 503</text>
+        </svg>
+        <figcaption>
+          Kullanıcının istediği öncelik: <strong>saatlik → bugünkü → dünkü</strong>. Saatlik
+          basamağı bilerek boştur; diğer üçü çalışır durumdadır.
+        </figcaption>
+      </figure>
+
+      <h3>Saatlik kur neden yok</h3>
+      <p>
+        TCMB'nin sitesinde "Saat Başı Belirlenen Döviz Kurları" diye bir sayfa var, dolayısıyla
+        akla ilk gelen şey oradan çekmek oluyor. İki ölçüm bunu kapattı:
+      </p>
+      <ul>
+        <li>
+          <strong>EVDS'in 671 veri grubunun tamamı tarandı.</strong> Frekanslar: AYLIK 284 ·
+          ÜÇ AYLIK 163 · YILLIK 102 · HAFTALIK 88 · İŞ GÜNÜ 21 · GÜNLÜK 10 · ALTI AYLIK 2 ·
+          AYDA İKİ KEZ 1. <em>Günden daha sık tek bir frekans yok.</em> Döviz grupları
+          (<code>bie_dkdovytl</code>) GÜNLÜK'tür. Aramada çıkan 11 "saat" eşleşmesi
+          <em>çalışılan saat</em> (işgücü istatistiği) serileridir.
+        </li>
+        <li>
+          <strong>O sayfa veri değil açıklama sayfasıdır.</strong> Tarayıcı ağ izinde tek bir
+          veri isteği yok ve sayfa metninde tek bir "USD" geçmiyor — kazınacak bir şey yok.
+        </li>
+      </ul>
+      <p>
+        Bu yüzden 1. basamak boş bırakıldı. İleride böyle bir kaynak çıkarsa zincirin başına
+        eklenir ve <strong>altındaki hiçbir şey değişmez</strong> — soyutlamanın varlık sebebi
+        tam olarak budur.
+      </p>
+
+      <h3>EVDS'in tuzağı: birim çarpanını göndermez</h3>
+      <p>
+        <code>today.xml</code> her satırda <code>&lt;Unit&gt;100&lt;/Unit&gt;</code> yazar;
+        EVDS'te böyle bir alan <strong>yoktur</strong>, çarpan sessiz bir gelenektir. JPY'nin
+        <code>30,0482</code> değeri "1 yen = 30 TL" değil "<strong>100</strong> yen = 30 TL"
+        demektir.
+      </p>
+      <div class="why">
+        <span class="tag">Tehlikeli olan ne</span>
+        <p>
+          Çarpan atlanırsa kur yine geçerli bir pozitif sayıdır, hiçbir doğrulamaya takılmaz ve
+          tutarları yalnız <strong>100 kat</strong> şişirir — tam olarak yön hatasıyla aynı
+          cinsten sessiz bir hata. Bu yüzden tablo eksik bir para birimi için sessizce 1
+          varsaymaz, <em>gürültülü patlar</em>; o durumda zincir <code>today.xml</code>'e iner,
+          yani hata servisi de düşürmez.
+        </p>
+      </div>
+
+      <h3>Anahtar düşerse ne olur — tatbikatla ölçüldü</h3>
+      <p>
+        EVDS bir anahtar ister. "Anahtar bozulursa servis düşer mi?" sorusu iddiayla değil
+        <strong>ölçümle</strong> cevaplandı: bilerek geçersiz anahtar verilmiş tek kullanımlık
+        bir konteyner ayağa kaldırıldı.
+      </p>
+      <pre><code><span class="c">// zincir: [evds, tcmb] — EVDS anahtarı kasıtlı olarak bozuk</span>
+TcmbExchangeRateProvider -- TCMB kurlari cekildi rateDate=2026-08-13
+ChainedExchangeRateProvider -- <span class="k">kur yedek yoldan alindi</span> kaynak=tcmb atlanan=[UNAUTHORIZED]</code></pre>
+      <p>
+        Servis kur sunmayı sürdürdü, sayılar aynı kaldı, yalnız tarih 13.08'e döndü ve tek
+        satır <code>WARN</code> düştü. <strong>Tek bir anahtar servisi düşüremez.</strong>
+        Anahtar hiç tanımlanmazsa da EVDS zincire girmez — <code>CURRENCY_EVDS_KEY</code> aynı
+        zamanda açma/kapama düğmesidir, ayrı bir bayrak yoktur ki "açık ama anahtarsız" gibi
+        çelişkili bir ayar kurulamasın.
+      </p>
+
+      <div class="why">
+        <span class="tag">Neden cevaptaki <code>provider</code> hep "tcmb" yazıyor</span>
+        <p>
+          Sağlayıcı adı iki iş görür: <strong>cache anahtarıdır</strong> ve cevaptaki
+          <code>provider</code> alanıdır. Hangi kapıdan girdiğimize göre değişseydi her yol
+          değişiminde cache <em>bölünür</em> (aynı kur iki kez tutulur, boşuna satıcıya
+          gidilir) ve tüketicinin gördüğü alan bizim iç seçimimize göre oynardı. İki yol da
+          aynı kurumun aynı kuru olduğu için ad <code>tcmb</code>'de sabittir; hangi kapıdan
+          girildiği <strong>log'dadır</strong> — orası tanılamanın yeri, sözleşme değil.
+        </p>
+      </div>
     </section>
 
     <!-- ═══════════════════════════════════════════════════ 9 -->
@@ -1163,7 +1326,7 @@ podman machine stop &amp;&amp; podman machine start
             </tr>
             <tr>
               <td><code>core/integrations/</code></td>
-              <td><code>ExchangeRateProvider</code> soyutlaması + <code>tcmb/</code></td>
+              <td><code>ExchangeRateProvider</code> soyutlaması + <code>Chained…</code> (öncelik) + <code>evds/</code> · <code>tcmb/</code></td>
               <td>Satıcıya özgü <em>her şey</em> kendi paketinde kalır</td>
             </tr>
             <tr>
@@ -1189,10 +1352,12 @@ podman machine stop &amp;&amp; podman machine start
         <span class="tag">En önemli kural</span>
         <p>
           <strong>Satıcının tel formatı kendi paketinden çıkmaz.</strong> TCMB'nin XML alan
-          adları <code>core/integrations/tcmb/dtos</code> içinde kalır; domaine yalnızca
-          mapper aracılığıyla girer. Bunun karşılığı şudur: yarın ECB eklenirse yalnız
-          <code>core/integrations/ecb/</code> yazılır — API sözleşmesi, önbellek ve iş katmanı
-          <em>hiç değişmez</em>.
+          adları <code>core/integrations/tcmb/dtos</code>, EVDS'in JSON sütunları
+          <code>core/integrations/evds/dtos</code> içinde kalır; domaine yalnızca mapper
+          aracılığıyla girer. Bu kuralın karşılığı <em>zaten alındı</em>: EVDS ikinci bir kapı
+          olarak eklendiğinde API sözleşmesi, önbellek ve iş katmanının <strong>tek satırı
+          bile değişmedi</strong> — yalnız yeni bir paket ve zincirde bir sıra. Yarın ECB
+          eklenirse de aynısı olur.
         </p>
       </div>
 

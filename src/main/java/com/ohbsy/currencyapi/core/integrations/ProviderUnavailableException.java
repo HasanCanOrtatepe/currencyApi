@@ -21,7 +21,16 @@ public class ProviderUnavailableException extends RuntimeException {
          */
         NOT_PUBLISHED,
         /** Cevap geldi ama okunamadı/doğrulamadan geçmedi. */
-        INVALID_PAYLOAD
+        INVALID_PAYLOAD,
+        /**
+         * Satıcı bizi tanımadı (401/403): anahtar yok, yanlış ya da süresi dolmuş.
+         *
+         * <p>{@link #TRANSPORT}'tan ayrılması operasyonel bir gerekliliktir: diğer sebepler
+         * <b>kendiliğinden düzelir</b> (satıcı geri gelir, tatil biter), bu düzelmez —
+         * yapılandırma değişene kadar her denemede tekrarlar. "TCMB düştü" ile "anahtarımız
+         * geçersiz" farklı işler gerektirir ve tek bir etiketle ayrılamaz.
+         */
+        UNAUTHORIZED
     }
 
     private final Reason reason;

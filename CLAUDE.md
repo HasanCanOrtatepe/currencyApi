@@ -21,7 +21,7 @@ Kullanıcıya görünen ürün adı **Pair 3 Kur Servisi**'dir (tanıtım sayfas
 ## Komutlar
 
 ```bash
-mvn test                       # 131 birim testi — ALTYAPISIZ (Redis/ağ gerekmez)
+mvn test                       # 167 birim testi — ALTYAPISIZ (Redis/ağ gerekmez)
 mvn spring-boot:run            # http://localhost:8095
 podman compose up -d --build   # tam yığın: redis + api + admin api + admin panel
 
@@ -37,7 +37,8 @@ JDK'ya bakabilir; `JAVA_HOME` Java 25'i işaret etmelidir.
 ```
 api/                 HTTP sözleşmesi — filtreler + controller'lar + DTO'lar
 business/            abstracts/ (arayüz) + concretes/ (uygulama) — kullanım senaryoları
-core/integrations/   ExchangeRateProvider SOYUTLAMASI; satıcıya özgü her şey kendi paketinde
+core/integrations/   ExchangeRateProvider SOYUTLAMASI + Chained… (öncelik sırası); satıcıya
+                     özgü her şey kendi paketinde: tcmb/ (today.xml) · evds/ (EVDS API)
 core/utilities/      Durumsuz yardımcılar (SecureXml, ApiKeyHasher)
 dataAccess/          RateCache · RateLimiter · ApiKeyStore — her biri memory|redis çiftli
 entities/            Domain modeli — hiçbir satıcının tel formatı değildir
@@ -51,11 +52,17 @@ admin-ui/            Angular admin paneli — bağımsız npm projesi, Maven'a d
   `Redis*`, ikisi de `@ConditionalOnProperty(currency-api.cache.type)` ile seçilir. Yeni bir
   depo eklerken bu desenden sapma.
 - **Satıcının tel formatı kendi paketinden ÇIKMAZ.** TCMB'nin XML'i
-  `core/integrations/tcmb/dtos` içinde kalır, domaine mapper ile girer. Yeni sağlayıcı
-  (ör. ECB) yalnız `core/integrations/<satıcı>/` altına eklenir; API sözleşmesi, cache ve iş
-  katmanı DEĞİŞMEZ.
-- **Kur yönü tek yerde biter** (`TcmbRateMapper`). Yön hatası sessizdir — ters çevrilmiş kur da
-  geçerli bir pozitif sayıdır ve hiçbir doğrulamaya takılmaz. Tek koruma testtir.
+  `core/integrations/tcmb/dtos`, EVDS'in JSON'u `core/integrations/evds/dtos` içinde kalır;
+  domaine mapper ile girer. Yeni sağlayıcı (ör. ECB) yalnız `core/integrations/<satıcı>/`
+  altına eklenir + zincire yazılır; API sözleşmesi, cache ve iş katmanı DEĞİŞMEZ.
+- **Kur yönü her sağlayıcının kendi mapper'ında biter** (`TcmbRateMapper`, `EvdsRateMapper`).
+  Yön hatası sessizdir — ters çevrilmiş kur da geçerli bir pozitif sayıdır ve hiçbir
+  doğrulamaya takılmaz. Tek koruma testtir; `EvdsRateMapperTest` ayrıca iki mapper'ın aynı
+  girdi için aynı çıktıyı ürettiğini sabitler.
+- **`EvdsRateMapper.UNIT` tablosu elle tutulur ve yanlışı 100 KATtır.** EVDS,
+  `today.xml`'in `<Unit>` alanının karşılığını **göndermez**: JPY'nin 30.0482 değeri
+  "1 JPY = 30 TL" değil "**100** JPY = 30 TL" demektir. Çarpan atlanırsa kur yine geçerli bir
+  pozitif sayıdır. Tablo eksik bir para birimi için sessizce 1 varsaymaz, gürültülü patlar.
 - **Sırlar depoya girmez.** `.env` gitignore'ludur; izlenen tek dosya anahtarsız
   `.env.example`'dır. Paylaşılmış (sohbet/ekran görüntüsü/PR) bir anahtar YANMIŞ sayılır.
 - **Anahtarlar log'a, metriğe, hata gövdesine GİRMEZ** — yanlış anahtar bile bir sırdır
@@ -64,6 +71,46 @@ admin-ui/            Angular admin paneli — bağımsız npm projesi, Maven'a d
   bileşenler `new` ile bağlanır. **Redis destekli sınıflar da bu kurala uyar:**
   `StringRedisTemplate` taklit edilir, çünkü sınanan şey Redis değil bizim kararlarımızdır
   (anahtar düzeni, KEYS taraması yapılmaması, fail-closed/fail-open ayrımı).
+
+### Sağlayıcı zinciri — öncelik: en yeni → en eski
+
+`ChainedExchangeRateProvider` sırayla dener, ilk başarılıyı döner. İş katmanı tek bir sağlayıcı
+görür; kaç yol olduğunu bilmez.
+
+| # | Basamak | Kaynak | Notu |
+|---|---|---|---|
+| 1 | ~~Saatlik~~ | **YOK** | Aranmadığı için değil, **olmadığı için** — aşağıya bkz. |
+| 2 | Bugünkü | **EVDS** (`TP.DK.*.S`) | Her satırı kendi günüyle verir |
+| 3 | Bugünkü (yedek) | `today.xml` | Anahtar istemez; tarih etiketi bir gün geriden |
+| 4 | Dünkü / son geçerli | cache (`STALE_CACHE`) | Zincirde DEĞİL, `ExchangeRateServiceImpl`'de |
+
+**Saatlik kaynak yoktur — ölçülerek kanıtlandı.** EVDS'in 671 veri grubunun tamamı tarandı;
+frekanslar AYLIK 284 · ÜÇ AYLIK 163 · YILLIK 102 · HAFTALIK 88 · İŞ GÜNÜ 21 · GÜNLÜK 10 …
+Günden sık tek bir frekans yok, döviz grupları (`bie_dkdovytl`) GÜNLÜK. TCMB'nin "Saat Başı
+Belirlenen Döviz Kurları" sayfası da veri değil **açıklama** sayfasıdır: tarayıcı ağ izinde tek
+bir veri isteği ve tek bir "USD" metni yoktur. 1. basamak **bilerek boştur**; kaynak çıkarsa
+zincirin başına eklenir, altındaki hiçbir şey değişmez.
+
+**EVDS neden 1. sırada — sayılar aynı olduğu halde.** İki kaynak da TCMB'nin aynı resmî satış
+kurudur ve rakamları birebir aynıdır (ölçüldü: USD 47.7717, JPY 0.300482 — tam eşleşme).
+Kazanılan tek şey **doğru tarihtir**: `today.xml`'in `Tarih` özniteliği bir gün geriden gelir
+(14.08 sabahı yayınlanan belge "13.08.2026" der, ama içindeki sayılar EVDS'in 14-08'e yazdığı
+sayılardır). "Elimizdeki kur bugünün mü" sorusu `today.xml` ile **cevaplanamaz**.
+
+**`CURRENCY_EVDS_KEY` aynı zamanda düğmedir.** Boşsa EVDS zincire hiç girmez ve servis eski
+davranışını aynen sürdürür. Ayrı bir `enabled` bayrağı YOKTUR: "açık ama anahtarsız" diye
+çelişkili bir yapılandırma kurulamasın diye. Anahtar `key` **başlığında** gider (sorgu
+dizesinde `403` alınır) — bu ayrıca URL'leri sırsız tutar, yani log ve stack trace'lerde URL
+basmak güvenlidir.
+
+**`name()` zincire göre DEĞİŞMEZ, `tcmb`de sabittir.** Sağlayıcı adı hem cache anahtarıdır hem
+cevaptaki `provider` alanı; yola göre değişseydi her yol değişiminde cache **bölünür** ve
+tüketicinin gördüğü alan bizim iç seçimimize göre oynardı. İki yol da aynı kurumun aynı
+kurudur, farklı olan yalnız kapıdır — hangi kapıdan girildiği **log'dadır**, sözleşmede değil.
+
+Yedek yol tatbikatla doğrulandı (iddia yeterli değildir): bozuk anahtarlı tek kullanımlık bir
+konteynerde EVDS `UNAUTHORIZED` aldı, zincir `today.xml`'e indi, **servis kur sunmayı
+sürdürdü** — yalnız tarih 13.08'e döndü ve tek satır WARN düştü.
 
 ### Fail-open / fail-closed — ikisi de bilinçli
 

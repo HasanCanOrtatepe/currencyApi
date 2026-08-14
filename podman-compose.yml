@@ -47,6 +47,10 @@ services:
       REDIS_HOST: redis
       # Boş bırakılırsa servisin kendi varsayılanı (gerçek TCMB) geçerlidir.
       TCMB_BASE_URL: ${TCMB_BASE_URL:-}
+      # EVDS anahtarı — kur zincirinin ilk basamağı. Boş bırakılabilir: o zaman zincir yalnız
+      # today.xml'den oluşur ve servis çalışmaya devam eder, yalnız bülten tarihi bir gün
+      # geriden gelir. Anahtar .env'den gelir, bu dosyaya YAZILMAZ.
+      CURRENCY_EVDS_KEY: ${CURRENCY_EVDS_KEY:-}
       # ANAHTAR DOĞRULAMASI BURADA VARSAYILAN OLARAK AÇIKTIR ve CRM'in compose'undaki
       # varsayılandan (kapalı) bilinçli olarak ayrılır: orada servis yalnız compose ağında
       # görünür, burada ise 8095 makinenin ağ arayüzünde durur. Ağa açılan bir uç, anahtarsız
@@ -100,6 +104,9 @@ services:
       CURRENCY_AUTH_ENABLED: ${CURRENCY_AUTH_ENABLED:-true}
       CURRENCY_API_KEYS: ${CURRENCY_API_KEYS:-}
       CURRENCY_RATE_LIMIT: ${CURRENCY_RATE_LIMIT:-120}
+      # Bu instance da kur sunar (aynı imaj, aynı Redis cache'i) — zinciri public instance ile
+      # AYNI tutmak gerekir, yoksa cache'i hangisinin doldurduğuna göre bülten tarihi oynardı.
+      CURRENCY_EVDS_KEY: ${CURRENCY_EVDS_KEY:-}
     ports:
       # YALNIZ LOOPBACK. Önce tüm arayüzlere bağlıydı ("LAN'dan da yönetebileyim") ama bu,
       # sabit bir ev ağı varsayımıydı: burası bir DİZÜSTÜ ve kafede/otelde/okulda bir Wi-Fi'a
