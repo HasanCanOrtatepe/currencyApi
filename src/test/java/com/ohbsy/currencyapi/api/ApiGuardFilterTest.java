@@ -4,12 +4,14 @@ import com.ohbsy.currencyapi.config.CurrencyApiProperties;
 import com.ohbsy.currencyapi.core.utilities.ApiKeyHasher;
 import com.ohbsy.currencyapi.dataAccess.ApiKeyStore;
 import com.ohbsy.currencyapi.dataAccess.InMemoryApiKeyStore;
+import com.ohbsy.currencyapi.dataAccess.InMemoryApiKeyUsageCounter;
 import com.ohbsy.currencyapi.dataAccess.InMemoryRateLimiter;
 import com.ohbsy.currencyapi.dataAccess.RateLimiter;
 import com.ohbsy.currencyapi.entities.ApiKeyRecord;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -43,6 +45,7 @@ class ApiGuardFilterTest {
     private ApiKeyStore apiKeyStore;
     private ApiClientResolver clients;
     private ApiGuardFilter filter;
+    private InMemoryApiKeyUsageCounter usageCounter;
 
     @BeforeEach
     void setUp() {
@@ -52,7 +55,8 @@ class ApiGuardFilterTest {
         apiKeyStore = new InMemoryApiKeyStore();
         clients = new ApiClientResolver(properties, apiKeyStore, FIXED);
         RateLimiter limiter = new InMemoryRateLimiter(properties, FIXED);
-        filter = new ApiGuardFilter(clients, limiter, TestMessages.create());
+        usageCounter = new InMemoryApiKeyUsageCounter(FIXED);
+        filter = new ApiGuardFilter(clients, limiter, usageCounter, TestMessages.create());
     }
 
     private MockHttpServletRequest request(String key) {
@@ -271,5 +275,81 @@ class ApiGuardFilterTest {
         filter.doFilter(request(rawKey), response, new MockFilterChain());
 
         assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    /**
+     * Birikmeli kullanım sayacı — admin panelindeki "Bugün/Toplam" sütunlarının kaynağı.
+     *
+     * <p>Panel önce yalnız hız sınırının kalan hakkını gösteriyordu; o sayı 1 dakikalık
+     * pencereye ait olduğu için seyrek çağıran bir tüketicide <b>hiç değişmiyor</b> görünüyordu.
+     */
+    @Nested
+    @DisplayName("Kullanım sayımı")
+    class UsageCounting {
+
+        private String saveKey(String id, String consumer) {
+            String rawKey = ApiKeyHasher.generateRawKey();
+            apiKeyStore.save(new ApiKeyRecord(id, consumer,
+                    ApiKeyHasher.sha256Hex(rawKey), ApiKeyHasher.preview(rawKey),
+                    FIXED.instant(), null, null, null));
+            return rawKey;
+        }
+
+        @Test
+        @DisplayName("Geçen her istek ANAHTAR kimliğine sayılır")
+        void countsServedRequests() throws Exception {
+            String rawKey = saveKey("id-usage", "raporlama");
+
+            for (int i = 0; i < 3; i++) {
+                filter.doFilter(request(rawKey), new MockHttpServletResponse(),
+                        new MockFilterChain());
+            }
+
+            assertThat(usageCounter.of("id-usage").total()).isEqualTo(3);
+            assertThat(usageCounter.of("id-usage").today()).isEqualTo(3);
+        }
+
+        /**
+         * 429 alan istek servis EDİLMEDİ. Sayılsaydı panelin "kullanım" sütunu, tüketiciye
+         * hiç dönmemiş cevapları da gösterirdi; kaçak bir döngü zaten hız sınırı WARN'ında
+         * görünür.
+         */
+        @Test
+        @DisplayName("Kotayı AŞAN istek sayılmaz — servis edilmeyen istek kullanım değildir")
+        void doesNotCountThrottledRequests() throws Exception {
+            properties.getRateLimit().setLimit(2);
+            String rawKey = saveKey("id-throttled", "tasan");
+
+            for (int i = 0; i < 5; i++) {
+                filter.doFilter(request(rawKey), new MockHttpServletResponse(),
+                        new MockFilterChain());
+            }
+
+            assertThat(usageCounter.of("id-throttled").total()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("401 alan istek sayılmaz")
+        void doesNotCountRejectedRequests() throws Exception {
+            filter.doFilter(request("bilinmeyen-anahtar"), new MockHttpServletResponse(),
+                    new MockFilterChain());
+
+            assertThat(usageCounter.of("id-usage")).isEqualTo(
+                    com.ohbsy.currencyapi.dataAccess.ApiKeyUsageCounter.Usage.none());
+        }
+
+        /**
+         * Statik anahtarların panelde satırı yoktur (açılışta bellek içi bean'e gömülüdürler).
+         * Sayaç onlar için sessizce atlanmalıdır — patlarsa CRM'in isteği düşer.
+         */
+        @Test
+        @DisplayName("Statik anahtar sayaca yazılmaz ama isteği GEÇER")
+        void staticKeyIsServedButNotCounted() throws Exception {
+            MockHttpServletResponse response = new MockHttpServletResponse();
+
+            filter.doFilter(request("gizli-anahtar"), response, new MockFilterChain());
+
+            assertThat(response.getStatus()).isEqualTo(200);
+        }
     }
 }

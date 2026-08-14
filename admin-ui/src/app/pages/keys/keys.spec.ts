@@ -22,6 +22,8 @@ function row(overrides: Partial<AdminApiKeyRow> = {}): AdminApiKeyRow {
     lastUsedAt: null,
     usageLimit: 120,
     usageRemaining: 120,
+    usageToday: 0,
+    usageTotal: 0,
     ...overrides,
   };
 }
@@ -198,5 +200,42 @@ describe('Keys', () => {
     component.ngOnDestroy();
 
     expect(clear).toHaveBeenCalled();
+  });
+
+  /**
+   * Tablonun KENDİSİ sınanır, bileşenin durumu değil: bildirilen hata ("key kullanıldıkça
+   * sayı azalmıyor") tam olarak burada yaşıyordu — panel hız sınırının dakikalık kalan
+   * hakkını gösteriyordu ve o sayı pencere dolunca kotaya geri dönüyordu.
+   */
+  describe('kullanım sütunları', () => {
+    async function render(overrides: Partial<AdminApiKeyRow>): Promise<HTMLElement> {
+      api.listResponse = { keys: [row(overrides)] };
+      const fixture = TestBed.createComponent(Keys);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it('birikmeli kullanım tabloda görünür', async () => {
+      const el = await render({ usageToday: 42, usageTotal: 1337 });
+
+      const text = el.querySelector('tbody tr')?.textContent ?? '';
+      expect(text).toContain('42');
+      expect(text).toContain('1337');
+    });
+
+    /** Kotaya eşitken taşıdığı bilgi yok; her zaman gösterilseydi sürekli "120 kaldı" derdi. */
+    it('kalan hak, pencere BOŞKEN gizlenir', async () => {
+      const el = await render({ usageLimit: 120, usageRemaining: 120 });
+
+      expect(el.querySelector('tbody tr')?.textContent).not.toContain('kaldı');
+    });
+
+    it('kalan hak, pencere DOLUYKEN görünür', async () => {
+      const el = await render({ usageLimit: 120, usageRemaining: 7 });
+
+      expect(el.querySelector('tbody tr')?.textContent).toContain('7 kaldı');
+    });
   });
 });

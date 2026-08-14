@@ -3,6 +3,7 @@ package com.ohbsy.currencyapi.business.concretes;
 import com.ohbsy.currencyapi.business.abstracts.ApiKeyService;
 import com.ohbsy.currencyapi.core.utilities.ApiKeyHasher;
 import com.ohbsy.currencyapi.dataAccess.ApiKeyStore;
+import com.ohbsy.currencyapi.dataAccess.ApiKeyUsageCounter;
 import com.ohbsy.currencyapi.dataAccess.RateLimiter;
 import com.ohbsy.currencyapi.entities.ApiKeyRecord;
 import org.springframework.stereotype.Service;
@@ -17,11 +18,14 @@ public class ApiKeyServiceImpl implements ApiKeyService {
 
     private final ApiKeyStore apiKeyStore;
     private final RateLimiter rateLimiter;
+    private final ApiKeyUsageCounter usageCounter;
     private final Clock clock;
 
-    public ApiKeyServiceImpl(ApiKeyStore apiKeyStore, RateLimiter rateLimiter, Clock clock) {
+    public ApiKeyServiceImpl(ApiKeyStore apiKeyStore, RateLimiter rateLimiter,
+                             ApiKeyUsageCounter usageCounter, Clock clock) {
         this.apiKeyStore = apiKeyStore;
         this.rateLimiter = rateLimiter;
+        this.usageCounter = usageCounter;
         this.clock = clock;
     }
 
@@ -88,8 +92,11 @@ public class ApiKeyServiceImpl implements ApiKeyService {
 
     private ApiKeyUsageView toUsageView(ApiKeyRecord record) {
         // peek: sayaci ARTIRMAZ, yalniz okur — listeleme bir tuketim degildir.
+        // Kimlik olarak consumerName kullanilir cunku hiz siniri KOVASI odur (ayni ada bagli
+        // iki anahtar ayni kovayi paylasir); birikmeli sayac ise ANAHTAR kimligiyle okunur.
         RateLimiter.Decision usage = rateLimiter.peek(record.consumerName(),
                 record.rateLimitOverride());
+        ApiKeyUsageCounter.Usage counted = usageCounter.of(record.id());
         return new ApiKeyUsageView(
                 record.id(),
                 record.consumerName(),
@@ -99,6 +106,8 @@ public class ApiKeyServiceImpl implements ApiKeyService {
                 record.rateLimitOverride(),
                 record.lastUsedAt(),
                 usage.limit(),
-                usage.remaining());
+                usage.remaining(),
+                counted.today(),
+                counted.total());
     }
 }

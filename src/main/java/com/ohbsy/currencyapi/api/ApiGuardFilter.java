@@ -1,5 +1,6 @@
 package com.ohbsy.currencyapi.api;
 
+import com.ohbsy.currencyapi.dataAccess.ApiKeyUsageCounter;
 import com.ohbsy.currencyapi.dataAccess.RateLimiter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -48,12 +49,14 @@ public class ApiGuardFilter extends OncePerRequestFilter {
 
     private final ApiClientResolver clients;
     private final RateLimiter rateLimiter;
+    private final ApiKeyUsageCounter usageCounter;
     private final ApiMessages messages;
 
     public ApiGuardFilter(ApiClientResolver clients, RateLimiter rateLimiter,
-                          ApiMessages messages) {
+                          ApiKeyUsageCounter usageCounter, ApiMessages messages) {
         this.clients = clients;
         this.rateLimiter = rateLimiter;
+        this.usageCounter = usageCounter;
         this.messages = messages;
     }
 
@@ -116,6 +119,12 @@ public class ApiGuardFilter extends OncePerRequestFilter {
                     messages.get(request, "error.rateLimitExceeded"));
             return;
         }
+
+        // Kotayı GEÇEN istek sayılır. 429 alanlar sayılsaydı panelde "kullanım" sütunu, servis
+        // edilmemiş istekleri de gösterir ve tüketiciye kesilen faturayla uyuşmazdı; kaçak bir
+        // döngü zaten hız sınırı WARN'ında görünür. Anonim/statik anahtarda keyId null'dır ve
+        // sayaç sessizce atlanır — onların panelde satırı yoktur.
+        usageCounter.record(resolved.map(ApiClientResolver.ResolvedClient::keyId).orElse(null));
 
         chain.doFilter(request, response);
     }

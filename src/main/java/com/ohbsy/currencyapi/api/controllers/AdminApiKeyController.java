@@ -122,6 +122,8 @@ public class AdminApiKeyController {
                 view.rateLimitOverride(),
                 view.lastUsedAt(),
                 view.usageLimit(),
-                view.usageRemaining());
+                view.usageRemaining(),
+                view.usageToday(),
+                view.usageTotal());
     }
 }

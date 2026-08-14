@@ -84,8 +84,15 @@ public class ApiClientResolver {
         return properties.getAuth().isEnabled();
     }
 
-    /** @param consumerName tüketici adı, @param rateLimitOverride yalnız dinamik anahtarda dolu */
-    public record ResolvedClient(String consumerName, Integer rateLimitOverride) {
+    /**
+     * @param consumerName      tüketici adı — hız sınırının kimliği budur
+     * @param rateLimitOverride yalnız dinamik anahtarda dolu
+     * @param keyId             dinamik anahtarın kimliği; <b>statik anahtarda {@code null}</b>.
+     *                          Kullanım sayacı buna yazılır: panelde bir satır bir ANAHTARdır,
+     *                          statik anahtarların ise satırı yoktur (açılışta bellek içi
+     *                          bean'e gömülüdürler, runtime'da yönetilmezler).
+     */
+    public record ResolvedClient(String consumerName, Integer rateLimitOverride, String keyId) {
     }
 
     /**
@@ -101,13 +108,13 @@ public class ApiClientResolver {
 
         String staticConsumer = properties.getAuth().getKeys().get(key);
         if (staticConsumer != null) {
-            return Optional.of(new ResolvedClient(staticConsumer, null));
+            return Optional.of(new ResolvedClient(staticConsumer, null, null));
         }
 
         return apiKeyStore.findByHash(ApiKeyHasher.sha256Hex(key))
                 .filter(ApiKeyRecord::isActive)
                 .map(record -> new ResolvedClient(record.consumerName(),
-                        touchLastUsed(record).rateLimitOverride()));
+                        touchLastUsed(record).rateLimitOverride(), record.id()));
     }
 
     /** İstekteki anahtara karşılık gelen tüketici adı; anahtar yok/tanınmıyorsa boş. */

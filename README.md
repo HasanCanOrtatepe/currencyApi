@@ -127,6 +127,7 @@ curl "localhost:8095/api/v1/rates?symbols=USD,EUR"
 | `currency-api.cache.ttl` | `15m` | Tazelik: içindeyken TCMB'ye gidilmez |
 | `currency-api.cache.retention` | `7d` | Saklama: tazelik dolsa da kayıt silinmez |
 | `currency-api.tcmb.base-url` | `https://www.tcmb.gov.tr` | |
+| `CURRENCY_EVDS_KEY` | — | EVDS anahtarı; **boşsa EVDS zincire hiç girmez** (ayrı `enabled` bayrağı yok) |
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | yalnız `type=redis` iken |
 | `CURRENCY_AUTH_ENABLED` | `false` | anahtar doğrulaması (401) |
 | `CURRENCY_API_KEYS` | — | `anahtar=tuketici,anahtar2=tuketici2` |
@@ -147,7 +148,8 @@ da geri getirir (`restart: unless-stopped`).
 
 ```bash
 cp .env.example .env      # CURRENCY_API_KEYS=<anahtar>=crm
-podman compose up -d --build
+# --force-recreate ZORUNLU: --build imajı yeniler ama konteyneri yenilemeyebilir (ölçüldü)
+podman compose up -d --build --force-recreate
 curl -H "X-API-Key: <anahtar>" "http://<bu-makine>:8095/api/v1/rates?symbols=USD"
 ```
 
@@ -284,8 +286,29 @@ kesintisinde ayakta kalması gereken bir tüketiciye dinamik değil **statik** (
 anahtar verin.
 
 Bir de `admin-ui/` altında bu API'nin üstüne ince bir Angular arayüzü vardır (anahtar listesi,
-oluşturma formu, tek seferlik gösterim, limit düzenleme, iptal) — `podman compose up -d --build`
-ile `http://localhost:8096`'da ayağa kalkar.
+oluşturma formu, tek seferlik gösterim, limit düzenleme, iptal) —
+`podman compose up -d --build --force-recreate` ile `http://localhost:8096`'da ayağa kalkar.
+
+### Kota ile kullanım AYRI şeylerdir
+
+Panel her satır için iki farklı sayı gösterir ve karıştırılmaları bir hata kaynağıdır:
+
+| Sütun | Ne ölçer | Davranışı |
+|---|---|---|
+| **Kota** (`usageLimit`) | dakikalık pencerede izin verilen istek | sabit |
+| *(kota altındayken)* `usageRemaining` | **şu anki dakikada** kalan hak | pencere dolunca kotaya döner |
+| **Bugün** (`usageToday`) | bugün (TSİ) yapılan istek | **birikmeli — azalmaz** |
+| **Toplam** (`usageTotal`) | anahtar üretildiğinden beri toplam | **birikmeli — azalmaz** |
+
+Panel başlangıçta yalnız `usageRemaining` gösteriyordu ve **donmuş görünüyordu**: 15 dakikada
+bir çağıran bir tüketici için o sayı 120'den 119'a inip saniyeler içinde 120'ye dönüyordu.
+Sayı doğruydu, **soru yanlıştı** — "şu an kaç hakkın kaldı" ile "ne kadar kullanıyorsun"
+farklı sorulardır. `usageRemaining` artık yalnız kotanın altındayken gösterilir: kotaya eşitken
+hiçbir bilgi taşımaz, altındayken tam olarak bakılması gereken sayıdır.
+
+Sayım **kotayı geçen** isteklere yapılır (429 alan istek servis edilmedi, kullanım sayılmaz) ve
+**anahtar kimliğine** yazılır. Statik `CURRENCY_API_KEYS` anahtarlarının panelde satırı yoktur,
+dolayısıyla sayılmazlar.
 
 > **Admin yüzeyi yalnız loopback'e (`127.0.0.1`) bağlıdır.** Önce tüm arayüzlere bağlıydı ama bu
 > sabit bir ev ağı varsayımıydı: burası bir dizüstü ve güvenilmeyen bir Wi-Fi'a bağlandığı anda
@@ -403,8 +426,8 @@ değil **test edilebilirliğin** parçasıdır.
 ## Test
 
 ```bash
-mvn test                                   # 167 test — backend
-cd admin-ui && npx ng test --watch=false   # 25 test — admin paneli
+mvn test                                   # 189 test — backend
+cd admin-ui && npx ng test --watch=false   # 28 test — admin paneli
 ```
 
 Backend testleri **altyapısızdır** (Redis/ağ gerekmez): saat enjekte edilir, böylece 15 dakikalık

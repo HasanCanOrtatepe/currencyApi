@@ -72,7 +72,8 @@
           <th>Anahtar</th>
           <th>Durum</th>
           <th class="num">Kota</th>
-          <th class="num">Kalan</th>
+          <th class="num">Bugün</th>
+          <th class="num">Toplam</th>
           <th>Oluşturuldu</th>
           <th>Son kullanım</th>
           <th></th>
@@ -93,8 +94,17 @@
               @if (!row.rateLimitOverride) {
                 <span class="note">vars.</span>
               }
+              <!--
+                Kalan hak YALNIZ o an anlamlıysa gösterilir. Her zaman gösterilseydi seyrek
+                çağıran bir tüketicide sürekli kotaya eşit durur, yani hiçbir bilgi taşımadan
+                yer kaplardı; kotanın altındayken ise tam olarak bakılması gereken sayıdır.
+              -->
+              @if (row.usageRemaining < row.usageLimit) {
+                <span class="note">{{ row.usageRemaining }} kaldı</span>
+              }
             </td>
-            <td class="num">{{ row.usageRemaining }}</td>
+            <td class="num">{{ row.usageToday }}</td>
+            <td class="num dim">{{ row.usageTotal }}</td>
             <td class="dim">{{ row.createdAt | date: 'dd.MM.yy HH:mm' }}</td>
             <td class="dim">{{ row.lastUsedAt ? (row.lastUsedAt | date: 'dd.MM.yy HH:mm') : '—' }}</td>
             <td>
@@ -108,7 +118,7 @@
           </tr>
         } @empty {
           <tr>
-            <td colspan="8" class="empty">
+            <td colspan="9" class="empty">
               {{ loading() ? 'Yükleniyor…' : 'Henüz anahtar yok.' }}
             </td>
           </tr>
@@ -116,7 +126,8 @@
       </tbody>
     </table>
     <div class="ledger-foot">
-      Kalan hak dakikalık pencere içindir · liste 10 saniyede bir yenilenir
+      Bugün / Toplam birikmeli sayaçlardır · Kota dakikalık penceredir, kalan hak yalnız
+      pencere doluyken görünür · liste 10 saniyede bir yenilenir
     </div>
   </div>
 </main>

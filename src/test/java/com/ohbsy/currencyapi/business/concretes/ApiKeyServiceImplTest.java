@@ -2,6 +2,7 @@ package com.ohbsy.currencyapi.business.concretes;
 
 import com.ohbsy.currencyapi.config.CurrencyApiProperties;
 import com.ohbsy.currencyapi.dataAccess.InMemoryApiKeyStore;
+import com.ohbsy.currencyapi.dataAccess.InMemoryApiKeyUsageCounter;
 import com.ohbsy.currencyapi.dataAccess.InMemoryRateLimiter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,12 +23,15 @@ class ApiKeyServiceImplTest {
 
     private InMemoryApiKeyStore store;
     private ApiKeyServiceImpl service;
+    private InMemoryApiKeyUsageCounter usageCounter;
 
     @BeforeEach
     void setUp() {
         store = new InMemoryApiKeyStore();
         CurrencyApiProperties properties = new CurrencyApiProperties();
-        service = new ApiKeyServiceImpl(store, new InMemoryRateLimiter(properties, FIXED), FIXED);
+        usageCounter = new InMemoryApiKeyUsageCounter(FIXED);
+        service = new ApiKeyServiceImpl(store, new InMemoryRateLimiter(properties, FIXED),
+                usageCounter, FIXED);
     }
 
     @Test

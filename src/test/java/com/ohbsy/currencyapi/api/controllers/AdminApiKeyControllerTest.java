@@ -8,6 +8,7 @@ import com.ohbsy.currencyapi.business.concretes.ApiKeyServiceImpl;
 import com.ohbsy.currencyapi.business.concretes.ApiKeyUsageView;
 import com.ohbsy.currencyapi.config.CurrencyApiProperties;
 import com.ohbsy.currencyapi.dataAccess.InMemoryApiKeyStore;
+import com.ohbsy.currencyapi.dataAccess.InMemoryApiKeyUsageCounter;
 import com.ohbsy.currencyapi.dataAccess.InMemoryRateLimiter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -35,7 +36,8 @@ class AdminApiKeyControllerTest {
     void setUp() {
         CurrencyApiProperties properties = new CurrencyApiProperties();
         realService = new ApiKeyServiceImpl(new InMemoryApiKeyStore(),
-                new InMemoryRateLimiter(properties, FIXED), FIXED);
+                new InMemoryRateLimiter(properties, FIXED),
+                new InMemoryApiKeyUsageCounter(FIXED), FIXED);
         controller = new AdminApiKeyController(realService);
     }
 

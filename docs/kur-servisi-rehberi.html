@@ -1521,14 +1521,15 @@ ChainedExchangeRateProvider -- <span class="k">kur yedek yoldan alindi</span> ka
 
       <h3>Çalıştırma</h3>
       <pre><code><span class="c"># Tüm yığın (redis + api + admin api + panel)</span>
-podman compose up -d --build
+<span class="c"># --force-recreate ZORUNLU: --build imajı yeniler ama konteyneri yenilemeyebilir</span>
+podman compose up -d --build --force-recreate
 
 <span class="c"># Yalnız uygulama, Redis'siz — bellek içi depolar devreye girer</span>
 mvn spring-boot:run
 
 <span class="c"># Testler</span>
-mvn test                                   <span class="c"># 127 backend</span>
-cd admin-ui &amp;&amp; npx ng test --watch=false   <span class="c"># 25 arayüz</span></code></pre>
+mvn test                                   <span class="c"># 189 backend</span>
+cd admin-ui &amp;&amp; npx ng test --watch=false   <span class="c"># 28 arayüz</span></code></pre>
 
       <h3>İşletim betikleri</h3>
       <div class="table-wrap">

@@ -21,13 +21,22 @@ Kullanıcıya görünen ürün adı **Pair 3 Kur Servisi**'dir (tanıtım sayfas
 ## Komutlar
 
 ```bash
-mvn test                       # 167 birim testi — ALTYAPISIZ (Redis/ağ gerekmez)
+mvn test                       # 189 birim testi — ALTYAPISIZ (Redis/ağ gerekmez)
 mvn spring-boot:run            # http://localhost:8095
-podman compose up -d --build   # tam yığın: redis + api + admin api + admin panel
 
-cd admin-ui && npx ng test --watch=false   # 25 birim testi
+# TAM YIĞIN — --force-recreate ZORUNLU, bkz. aşağıdaki not
+podman compose up -d --build --force-recreate
+
+cd admin-ui && npx ng test --watch=false   # 28 birim testi
 cd admin-ui && npx ng build                # prod build
 ```
+
+**`--build` tek başına dağıtım DEĞİLDİR (ölçülerek öğrenildi).** Bir dağıtımda üç imajın
+üçü de yeniden derlendi (`podman images` hepsini "1 dakika önce" gösteriyordu) ama
+konteynerlerin ikisi **yeniden oluşturulmadı**: `podman ps` onları hâlâ "Up 56 minutes"
+diye gösteriyordu, yani eski kodu çalıştırmaya devam ediyorlardı. Arıza sessizdir — derleme
+başarılı, konteynerler sağlıklı, yalnız yeni davranış ortada yoktur. Doğrulama şudur:
+`podman ps` çıktısındaki **Up süresi** dağıtımdan yeni olmalıdır.
 
 Java 25 gerekir (`pom.xml` → `java.version=25`). Homebrew Maven'ı varsayılan olarak başka bir
 JDK'ya bakabilir; `JAVA_HOME` Java 25'i işaret etmelidir.
@@ -51,6 +60,11 @@ admin-ui/            Angular admin paneli — bağımsız npm projesi, Maven'a d
 - **`dataAccess/` deseni tektir:** bir arayüz + `InMemory*` (`matchIfMissing=true`) +
   `Redis*`, ikisi de `@ConditionalOnProperty(currency-api.cache.type)` ile seçilir. Yeni bir
   depo eklerken bu desenden sapma.
+- **Kota ile kullanım AYRI şeylerdir ve karıştırılmamalıdır.** `RateLimiter` bir *kontrol*dür:
+  sayacı 1 dakikalık penceredir ve pencere dolunca sıfırlanır. `ApiKeyUsageCounter` bir
+  *ölçüm*dür: birikmelidir, azalmaz. Admin paneli önce yalnız birincisini gösteriyordu ve
+  15 dakikada bir çağıran bir tüketici için o sayı **hep dolu** görünüyordu — sayı doğruydu,
+  soru yanlıştı. Aynı sayaca ikisini birden yaptırma.
 - **Satıcının tel formatı kendi paketinden ÇIKMAZ.** TCMB'nin XML'i
   `core/integrations/tcmb/dtos`, EVDS'in JSON'u `core/integrations/evds/dtos` içinde kalır;
   domaine mapper ile girer. Yeni sağlayıcı (ör. ECB) yalnız `core/integrations/<satıcı>/`
