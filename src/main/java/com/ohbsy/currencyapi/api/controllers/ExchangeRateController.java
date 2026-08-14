@@ -96,7 +96,8 @@ public class ExchangeRateController {
                         code.name(), snapshot.unitPriceOf(code)))
                 .toList();
 
-        return ResponseEntity.ok(new RatePreviewResponse(snapshot.rateDate(), rows));
+        return ResponseEntity.ok(
+                new RatePreviewResponse(snapshot.rateDate(), snapshot.fetchedAt(), rows));
     }
 
     /**

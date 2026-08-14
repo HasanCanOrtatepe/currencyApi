@@ -138,8 +138,11 @@ kendiliğinden dönmesini beklemek. Ölçülen toparlanma: ~18 saniye.
   Gelen değere güvenilmez: yalnız harf/rakam/`-`/`_` ve makul uzunluk kabul edilir (log forging).
 - **İki kur yönü de sunulur** (`rate` = 1 TRY kaç birim, `unitPrice` = 1 birim kaç TRY).
   Dönüşümü her tüketicinin ayrı yapması sessiz yön hatalarının kaynağıdır.
-- **`/api/v1/rates/preview` anahtarsızdır ve ürünün yerine geçmez:** yalnız birkaç para birimi
-  ve yalnız `unitPrice` döner; `rate` (çevrim yönü), `provider`, `cache`, `stale` YOKTUR.
+- **`/api/v1/rates/preview` anahtarsızdır ve ürünün yerine geçmez:** yalnız birkaç para birimi,
+  satırlarda yalnız `unitPrice`; `rate` (çevrim yönü), `provider`, `cache`, `stale` YOKTUR.
+  Gövdede `rateDate` ve `fetchedAt` bulunur — pano ikisini birden göstermelidir: yalnız bülten
+  günü gösterilince "bugün 14'ü, neden 13 yazıyor, servis mi takıldı?" sorusu doğuyordu. Cevap
+  "en son ne zaman baktığımız"dır; TCMB bülteni gün içinde bir kez yayınlar.
   Tanıtım sayfasındaki panoyu besler — sayfaya anahtar gömmek onu yakmak olurdu, sabit yazılmış
   sayılar ise bir kur servisinin vitrininde eskiyip yanlışa dönerdi. `ApiGuardFilter`'da
   **tam eşleşmeyle** auth'tan muaftır ama filtreden çıkarılmaz: hız sınırı uygulanmaya devam eder.

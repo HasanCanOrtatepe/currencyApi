@@ -177,6 +177,11 @@
     padding:10px 18px; font-family:var(--mono); font-size:10.5px; color:var(--text-dim);
     border-top:1px solid var(--rule);
   }
+  /* Bülten günü ile SON KONTROL anı yan yana durur: ikisi farklı şeylerdir ve yalnız
+     biri gösterilince "servis takıldı mı" sorusu doğuyordu. */
+  .board-stamp{display:flex; align-items:baseline; gap:6px; flex-wrap:wrap;}
+  .board-stamp b{color:var(--text-mid); font-weight:600;}
+  .board-stamp i{color:var(--rule-brass); font-style:normal;}
 
   /* ---------- SECTIONS shared ---------- */
   section{padding:72px 0;}
@@ -324,8 +329,14 @@
 
     <div class="board">
       <div class="board-head">
-        <span class="tr">TCMB Bülteni · Canlı</span><span class="en">TCMB Bulletin · Live</span>
-        <span id="board-date">—</span>
+        <span class="tr">TCMB Bülteni</span><span class="en">TCMB Bulletin</span>
+        <span class="board-stamp">
+          <span class="tr">bülten</span><span class="en">bulletin</span>
+          <b id="board-date">—</b>
+          <i>·</i>
+          <span class="tr">son kontrol</span><span class="en">last checked</span>
+          <b id="board-checked">—</b>
+        </span>
       </div>
       <div class="board-rows" id="board-rows">
         <div class="board-row" data-code="USD">
@@ -353,8 +364,8 @@
           <span class="board-unit tr">TRY / birim</span><span class="board-unit en">TRY / unit</span>
         </div>
       </div>
-      <div class="board-foot tr">Servisin kendi ucundan canlı okunur. TCMB'nin o günkü resmî yayınıdır — anlık piyasa kuru değildir.</div>
-      <div class="board-foot en">Read live from the service's own endpoint. TCMB's official daily publication — not a live market feed.</div>
+      <div class="board-foot tr">TCMB bülteni gün içinde bir kez yayınlanır; yayınlanana kadar son iş gününün kuru geçerlidir. Anlık piyasa kuru değildir.</div>
+      <div class="board-foot en">TCMB publishes its bulletin once per business day; until then the last business day's rates apply. Not a live market feed.</div>
     </div>
   </div>
 </section>
@@ -599,6 +610,7 @@ res, _ := client.<span class="tok-fn">Do</span>(req)</pre></div>
    */
   (async () => {
     const dateEl = document.getElementById('board-date');
+    const checkedEl = document.getElementById('board-checked');
     try {
       const res = await fetch('/api/v1/rates/preview', { headers: { 'Accept': 'application/json' } });
       if (!res.ok) throw new Error('preview ' + res.status);
@@ -614,10 +626,19 @@ res, _ := client.<span class="tok-fn">Do</span>(req)</pre></div>
         const [y, m, d] = data.rateDate.split('-');
         dateEl.textContent = `${d}.${m}.${y}`;
       }
+
+      // Saat, OKUYUCUNUN kendi saat dilimiyle ve dilim etiketiyle yazılır: tüketiciler
+      // farklı ülkelerde ve etiketsiz bir "10:21" onlar için yanıltıcı olurdu.
+      if (data.fetchedAt) {
+        checkedEl.textContent = new Date(data.fetchedAt).toLocaleTimeString([], {
+          hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+        });
+      }
     } catch {
       // Kur alınamadıysa SAYI UYDURMA: pano boş kalır ve durum açıkça yazılır.
-      dateEl.textContent = document.body.classList.contains('lang-en')
-        ? 'unavailable' : 'kur alınamadı';
+      const en = document.body.classList.contains('lang-en');
+      dateEl.textContent = en ? 'unavailable' : 'kur alınamadı';
+      checkedEl.textContent = '—';
     }
   })();
 

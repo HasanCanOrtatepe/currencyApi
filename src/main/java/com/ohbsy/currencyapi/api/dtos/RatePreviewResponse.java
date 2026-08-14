@@ -1,6 +1,7 @@
 package com.ohbsy.currencyapi.api.dtos;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -13,10 +14,18 @@ import java.util.List;
  * bilinçli olarak YOKTUR. Kur verisinin kendisi zaten TCMB'nin herkese açık yayınıdır;
  * gizlenen bir şey değil, sözleşmenin tamamıdır.
  *
- * @param rateDate TCMB'nin yayın günü
- * @param rates    birim fiyatlar (1 birim kaç TRY)
+ * <h2>Neden {@code fetchedAt} da var</h2>
+ * Yalnız {@code rateDate} gösterilince kaçınılmaz bir soru doğuyor: "bugün 14'ü, sayfada
+ * 13'ün kuru yazıyor — servis mi takıldı?" Takılmıyor; TCMB bülteni gün içinde bir kez
+ * yayınlar ve o ana kadar geçerli olan son iş gününün kurudur. Bunu ancak <b>en son ne zaman
+ * baktığımızı</b> da göstererek anlatabiliriz: "bülten 13.08, ama biz 10:21'de kontrol ettik"
+ * cümlesi soruyu sormadan cevaplar.
+ *
+ * @param rateDate  TCMB'nin yayın günü
+ * @param fetchedAt bizim TCMB'ye en son gidip veriyi aldığımız an
+ * @param rates     birim fiyatlar (1 birim kaç TRY)
  */
-public record RatePreviewResponse(LocalDate rateDate, List<Row> rates) {
+public record RatePreviewResponse(LocalDate rateDate, Instant fetchedAt, List<Row> rates) {
 
     /** @param unitPrice 1 {@code currency} kaç TRY eder */
     public record Row(String currency, BigDecimal unitPrice) {
