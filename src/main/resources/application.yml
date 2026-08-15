@@ -62,6 +62,16 @@ currency-api:
     # Sınır, cache'i devre dışı kalan ya da döngüye giren tüketici içindir.
     limit: ${CURRENCY_RATE_LIMIT:120}
     window: 1m
+    # Anonim isteğin adresini taşıyan başlık. VARSAYILAN BOŞ = başlığa güvenilmez.
+    #
+    # Tünel arkasında getRemoteAddr() HER internet isteği için aynı adresi verir (ölçüldü:
+    # remote=10.89.0.3) — yani "kota IP başına" sözü boşa düşer ve tek bir çağıran anahtarsız
+    # önizleme ucunu herkese 429 yaptırabilir. Üretimde CF-Connecting-IP verilir: o başlığı
+    # cloudflared kendisi YAZAR, tünelden geçen istemci uyduramaz.
+    #
+    # Portu doğrudan güvenilmeyen bir ağa açan bir kurulumda BOŞ BIRAKILMALIDIR: orada başlık
+    # uydurulabilir ve sınır her istekte yeni bir kimlikle atlatılabilirdi.
+    client-ip-header: ${CURRENCY_CLIENT_IP_HEADER:}
   admin:
     # Varsayılan KAPALI — Auth.enabled ile aynı gerekçe, artı: bu servisin CANLI bir kurulumu
     # varsa, özelliğin eklendiği bir imaj güncellemesi .env güncellenmeden o kurulumu kırmasın.
@@ -72,9 +82,13 @@ currency-api:
     # yalnız 8095'i ileriye taşır; admin uçlarının aynı portta durması, path filtreden
     # bağımsız olarak onları internete açardı (tunnel path değil TÜM portu yönlendirir).
     port: ${CURRENCY_ADMIN_PORT:8097}
-    # Angular admin-ui'nin origin DESENİ — yalnız /admin/** için CORS izni. Host serbest
-    # (LAN'daki herhangi bir cihazdan erişilebilsin), yalnız admin-ui'nin portu (8096) sabit.
-    cors-origin-pattern: ${CURRENCY_ADMIN_CORS_ORIGIN_PATTERN:http://*:8096}
+    # Angular admin-ui'nin izinli origin'leri — yalnız /admin/** için CORS izni.
+    #
+    # Önceki değer http://*:8096 idi (host SERBEST) ve panel LAN'a açıkken gerekiyordu; panel
+    # loopback'e çekildikten sonra o gevşeklik yalnız kâğıt üzerinde kaldı. Tarayıcı adres
+    # çubuğuna localhost da 127.0.0.1 de yazılabildiği için İKİSİ birden listelenir: yalnız
+    # biri olsaydı, kullanıcının hangi yazımı seçtiğine göre panel sessizce çalışmazdı.
+    cors-origin-pattern: ${CURRENCY_ADMIN_CORS_ORIGIN_PATTERN:http://localhost:8096,http://127.0.0.1:8096}
   simulator:
     # Sahte satıcı yüzeyi (/kurlar/**, /stats/**) ve kaos uçları (/__mode, /__settings, /__reset).
     # Varsayılan KAPALI: kaos uçları anahtar İSTEMEZ (kaosu süren duman testinin elinde anahtar
@@ -86,7 +100,16 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        # VARSAYILAN YALNIZ health — bilinçli daraltma. Önce health,info,metrics idi ve bu,
+        # tünelin taşıdığı public portta ölçülerek doğrulanmış bir sızıntıydı:
+        # /actuator/metrics anahtarsız cevap veriyor, jvm.info ile JDK sürümünü (CVE eşlemesi),
+        # disk.free ile makine bilgisini, http.server.requests ile tüm uç listesini ve istek
+        # sayılarını dışarı veriyordu. Sağlık ucu orkestratör için gereklidir ve zaten
+        # detaysızdır (show-details: when-authorized).
+        #
+        # Metrik gerekiyorsa YALNIZ loopback'e bağlı admin instance'ında açılır
+        # (CURRENCY_ACTUATOR_EXPOSE=health,info,metrics) — orada da ApiGuardFilter anahtar ister.
+        include: ${CURRENCY_ACTUATOR_EXPOSE:health}
   endpoint:
     health:
       probes:

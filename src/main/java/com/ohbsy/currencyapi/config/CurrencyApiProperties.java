@@ -158,12 +158,35 @@ public class CurrencyApiProperties {
         /** Sabit pencere uzunluğu. */
         private Duration window = Duration.ofMinutes(1);
 
+        /**
+         * Anonim isteğin adresini taşıyan başlık (ör. {@code CF-Connecting-IP}) — <b>varsayılan
+         * BOŞ, yani kapalı</b>.
+         *
+         * <p>Tünel arkasında {@code getRemoteAddr()} her internet isteği için aynı adresi verir
+         * ve "kota IP başına" sözü boşa düşer (bkz. {@code ApiClientResolver.clientIp}). Bu ayar
+         * o durumu düzeltir; ancak <b>yalnız</b> portun önünde başlığı kendisi YAZAN bir vekil
+         * varsa verilmelidir. Portu doğrudan güvenilmeyen bir ağa açan kurulumda başlık
+         * uydurulabilir olurdu — bu yüzden varsayılan "güvenme"dir ve açmak bilinçli bir
+         * dağıtım kararıdır ({@code Auth.enabled} ile aynı desen).
+         */
+        private String clientIpHeader = "";
+
         public boolean isEnabled() {
             return enabled;
         }
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+
+        public String getClientIpHeader() {
+            return clientIpHeader;
+        }
+
+        /** Yer tutucu değerler ({@code __unset__}) elenir — {@code Evds#setKey} ile aynı tuzak. */
+        public void setClientIpHeader(String clientIpHeader) {
+            String trimmed = clientIpHeader == null ? "" : clientIpHeader.trim();
+            this.clientIpHeader = trimmed.startsWith("__") ? "" : trimmed;
         }
 
         public int getLimit() {

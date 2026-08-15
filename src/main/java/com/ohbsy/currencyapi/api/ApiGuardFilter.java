@@ -21,15 +21,23 @@ import java.util.Set;
  * Ticari kur API'lerinin iki kapısı: <b>anahtar</b> ve <b>hız sınırı</b>.
  *
  * <pre>
+ * kota aşıldı             → 429 + Retry-After   (ÖNCE bu: başarısız deneme de kota harcar)
  * anahtar yok/tanınmıyor  → 401
- * kota aşıldı             → 429 + Retry-After
  * </pre>
  *
- * <h2>Actuator MUAFTIR — bilinçli</h2>
- * {@code /actuator/**} anahtar istemez: sağlık ucunu çağıran taraf orkestratördür (compose
+ * <h2>Muaf olan yalnız SAĞLIK ucudur, {@code /actuator/**} DEĞİL</h2>
+ * {@code /actuator/health} anahtar istemez: onu çağıran taraf orkestratördür (compose
  * healthcheck, Kubernetes probe) ve <b>elinde anahtar yoktur</b>. Anahtar istenseydi her
  * kurulum sağlıksız görünür, orkestratör de çalışan servisi sürekli yeniden başlatırdı —
  * güvenlik kazanmadan erişilebilirlik kaybedilirdi.
+ *
+ * <p>Muafiyet önce {@code /actuator} ÖNEKİNİN tamamınaydı ve bu, tünelin taşıdığı public portta
+ * ölçülerek doğrulanmış bir sızıntıydı: {@code /actuator/metrics} anahtarsız <b>ve kotasız</b>
+ * cevap veriyor, JDK sürümünü ({@code jvm.info}), çalışma süresini, disk boşluğunu ve
+ * {@code http.server.requests} üzerinden tüm uç listesini dışarı veriyordu. Sürüm bilgisi
+ * bir saldırgan için CVE eşlemesidir; kotasızlık ise sınırın hiç uygulanmadığı bir yüzeydir.
+ * Sağlık ucu dışındaki her actuator yolu artık kapıdan geçer. Sondaların
+ * ({@code /actuator/health/liveness}, {@code /readiness}) muafiyeti korunur.
  *
  * <h2>Anahtar loglanmaz</h2>
  * Reddedilen istek bile anahtarı yazmaz: yanlış anahtarın kendisi de bir sırdır (çoğu zaman
@@ -42,6 +50,9 @@ public class ApiGuardFilter extends OncePerRequestFilter {
 
     /** Tanıtım sayfasının panosu — anahtarsız, ama hız sınırına tabi (bkz. doFilterInternal). */
     private static final String PUBLIC_PREVIEW_PATH = "/api/v1/rates/preview";
+
+    /** Orkestratörün sorduğu tek uç. Altındaki sondalar (liveness/readiness) da muaftır. */
+    private static final String HEALTH_PATH = "/actuator/health";
 
     private static final String LIMIT_HEADER = "X-RateLimit-Limit";
     private static final String REMAINING_HEADER = "X-RateLimit-Remaining";
@@ -61,7 +72,7 @@ public class ApiGuardFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Sağlık/metrik uçları, simülatörün kaos uçları ve admin yüzeyi kapıların dışındadır.
+     * Sağlık ucu, simülatörün kaos uçları ve admin yüzeyi kapıların dışındadır.
      * Admin trafiği kendi filtre zincirine ({@code AdminAuthFilter}) sahiptir ve bir "tüketici"
      * değildir — hız sınırına tabi tutulması ya da consumer anahtarı istenmesi anlamsızdır.
      *
@@ -79,8 +90,16 @@ public class ApiGuardFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
         return PUBLIC_STATIC_PATHS.contains(path)
-                || path.startsWith("/actuator") || path.startsWith("/__")
+                || isHealthProbe(path) || path.startsWith("/__")
                 || path.startsWith("/admin");
+    }
+
+    /**
+     * Tam eşleşme ya da sonda alt yolu — {@code /actuator/health-detay} gibi bir uç
+     * uydurulup muafiyete sızamasın diye önek kontrolü ayırıcıyı DA içerir.
+     */
+    private static boolean isHealthProbe(String path) {
+        return HEALTH_PATH.equals(path) || path.startsWith(HEALTH_PATH + "/");
     }
 
     @Override
@@ -94,20 +113,20 @@ public class ApiGuardFilter extends OncePerRequestFilter {
         // Tanıtım panosunun önizleme ucu ANAHTAR İSTEMEZ ama filtreden ÇIKARILMAZ: shouldNotFilter
         // ile muaf tutulsaydı hız sınırı da uygulanmazdı ve herkese açık bir uç sınırsız kalırdı.
         // Böylece anonim istek IP kimliğiyle sayılmaya devam eder.
-        if (clients.isAuthEnabled() && resolved.isEmpty() && !isPublicPreview(request)) {
-            log.warn("gecersiz ya da eksik API anahtari path={} remote={}",
-                    request.getRequestURI(), request.getRemoteAddr());
-            write(response, HttpStatus.UNAUTHORIZED,
-                    messages.get(request, "error.unauthorized"));
-            return;
-        }
+        boolean unauthenticated =
+                clients.isAuthEnabled() && resolved.isEmpty() && !isPublicPreview(request);
 
         String identity = resolved.map(ApiClientResolver.ResolvedClient::consumerName)
-                .orElseGet(() -> "ip:" + request.getRemoteAddr());
+                .orElseGet(() -> "ip:" + clients.clientIp(request));
         Integer rateLimitOverride = resolved
                 .map(ApiClientResolver.ResolvedClient::rateLimitOverride)
                 .orElse(null);
 
+        // KOTA, 401'DEN ÖNCE İŞLER — bilinçli. Sıra tersken başarısız kimlik doğrulaması hiç
+        // sayılmıyordu: anahtar denemesi SINIRSIZDI ve dinamik anahtar biçimindeki her deneme
+        // ayrıca bir Redis okuması harcatıyordu. 256 bitlik anahtara kaba kuvvet zaten
+        // hesaplanamaz ölçüde pahalıdır; kapatılan şey kaba kuvvet değil, anonim bir çağıranın
+        // servisten SINIRSIZ iş çekebildiği tek yoldur.
         RateLimiter.Decision decision = rateLimiter.tryConsume(identity, rateLimitOverride);
         response.setHeader(LIMIT_HEADER, String.valueOf(decision.limit()));
         response.setHeader(REMAINING_HEADER, String.valueOf(decision.remaining()));
@@ -117,6 +136,16 @@ public class ApiGuardFilter extends OncePerRequestFilter {
             response.setHeader(RETRY_AFTER_HEADER, String.valueOf(decision.retryAfterSeconds()));
             write(response, HttpStatus.TOO_MANY_REQUESTS,
                     messages.get(request, "error.rateLimitExceeded"));
+            return;
+        }
+
+        if (unauthenticated) {
+            // remote= artık ÇÖZÜLMÜŞ adrestir: tünel arkasında getRemoteAddr() her istek için
+            // aynı değeri verdiğinden bu satır kimseyi işaret etmiyordu.
+            log.warn("gecersiz ya da eksik API anahtari path={} remote={}",
+                    request.getRequestURI(), clients.clientIp(request));
+            write(response, HttpStatus.UNAUTHORIZED,
+                    messages.get(request, "error.unauthorized"));
             return;
         }
 

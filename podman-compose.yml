@@ -61,6 +61,13 @@ services:
       # 401'lemektense gürültülü hata).
       CURRENCY_API_KEYS: ${CURRENCY_API_KEYS:-}
       CURRENCY_RATE_LIMIT: ${CURRENCY_RATE_LIMIT:-120}
+      # Hız sınırı kimliği bu başlıktan okunur. Konteynere gelen bağlantının kaynağı TÜM
+      # internet trafiği için aynıdır (ölçüldü: remote=10.89.0.3), yani başlıksız kurulumda
+      # "kota IP başına" pratikte "kota TÜM DÜNYAYA tek kova" demekti: tek bir çağıran,
+      # anahtarsız önizleme ucunu dakikada 120 istekle herkese 429 yaptırabiliyordu.
+      # CF-Connecting-IP'yi cloudflared her istekte kendisi yazar; tünelden uydurulamaz.
+      # Bu portu tünelsiz, doğrudan güvenilmeyen bir ağa açan bir kurulum bunu BOŞ bırakmalıdır.
+      CURRENCY_CLIENT_IP_HEADER: ${CURRENCY_CLIENT_IP_HEADER:-CF-Connecting-IP}
     ports:
       # 8095'i LAN'a açar. İNTERNETE yönlendirmeyin: anahtar düz HTTP üzerinde açık gider ve
       # yol boyunca okunabilir. Dışarı açılacaksa önüne TLS sonlandıran bir ters vekil konur.
@@ -100,7 +107,13 @@ services:
       # Bos birakilirsa currency-api-admin ACILISTA duser (admin.enabled=true + bos token).
       CURRENCY_ADMIN_TOKEN: ${CURRENCY_ADMIN_TOKEN:-}
       CURRENCY_ADMIN_PORT: ${CURRENCY_ADMIN_PORT:-8097}
-      CURRENCY_ADMIN_CORS_ORIGIN_PATTERN: ${CURRENCY_ADMIN_CORS_ORIGIN_PATTERN:-http://*:8096}
+      # Loopback çifti — host serbest (http://*:8096) DEĞİL. Panel yalnız loopback'e bağlıyken
+      # host'u serbest bırakmak, kullanılmayan bir izni açık tutmaktan başka bir şey değildi.
+      CURRENCY_ADMIN_CORS_ORIGIN_PATTERN: ${CURRENCY_ADMIN_CORS_ORIGIN_PATTERN:-http://localhost:8096,http://127.0.0.1:8096}
+      # Metrikler YALNIZ burada açıktır: bu konteyner loopback'e bağlıdır, public olan değil.
+      # /actuator/metrics burada da anahtarsız DEĞİLDİR (ApiGuardFilter yalnız /actuator/health'i
+      # muaf tutar) — loopback + anahtar, iki katman.
+      CURRENCY_ACTUATOR_EXPOSE: ${CURRENCY_ACTUATOR_EXPOSE:-health,info,metrics}
       CURRENCY_AUTH_ENABLED: ${CURRENCY_AUTH_ENABLED:-true}
       CURRENCY_API_KEYS: ${CURRENCY_API_KEYS:-}
       CURRENCY_RATE_LIMIT: ${CURRENCY_RATE_LIMIT:-120}

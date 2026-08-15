@@ -8,6 +8,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.ohbsy.currencyapi.core.utilities.BoundedHttpBody;
+
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -126,30 +129,39 @@ public class EvdsExchangeRateProvider implements ExchangeRateProvider {
                     .header("User-Agent", "crm-currency-api/1.0")
                     .GET()
                     .build();
-            HttpResponse<String> response =
-                    httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            // ofString() DEĞİL: gövde üst sınırlı okunur, bkz. BoundedHttpBody.
+            HttpResponse<InputStream> response =
+                    httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
 
-            if (response.statusCode() == 401 || response.statusCode() == 403) {
-                // Cevap gövdesi TAŞINMAZ: hatalı anahtarı yankılayan bir satıcı olsaydı
-                // anahtar log'a bizim elimizle girerdi.
-                throw new ProviderUnavailableException(
-                        ProviderUnavailableException.Reason.UNAUTHORIZED,
-                        "EVDS anahtari kabul edilmedi (HTTP " + response.statusCode() + ")");
+            // Hata yollarında da kapanmalı: kapatılmayan gövde bağlantıyı havuzda tutar.
+            try (InputStream body = response.body()) {
+                if (response.statusCode() == 401 || response.statusCode() == 403) {
+                    // Cevap gövdesi TAŞINMAZ: hatalı anahtarı yankılayan bir satıcı olsaydı
+                    // anahtar log'a bizim elimizle girerdi.
+                    throw new ProviderUnavailableException(
+                            ProviderUnavailableException.Reason.UNAUTHORIZED,
+                            "EVDS anahtari kabul edilmedi (HTTP " + response.statusCode() + ")");
+                }
+                if (response.statusCode() == 404) {
+                    throw new ProviderUnavailableException(
+                            ProviderUnavailableException.Reason.NOT_PUBLISHED,
+                            "EVDS serisi bulunamadi: " + url);
+                }
+                if (response.statusCode() != 200) {
+                    throw new ProviderUnavailableException(
+                            ProviderUnavailableException.Reason.TRANSPORT,
+                            "EVDS HTTP " + response.statusCode());
+                }
+                return BoundedHttpBody.read(body, response.headers());
             }
-            if (response.statusCode() == 404) {
-                throw new ProviderUnavailableException(
-                        ProviderUnavailableException.Reason.NOT_PUBLISHED,
-                        "EVDS serisi bulunamadi: " + url);
-            }
-            if (response.statusCode() != 200) {
-                throw new ProviderUnavailableException(
-                        ProviderUnavailableException.Reason.TRANSPORT,
-                        "EVDS HTTP " + response.statusCode());
-            }
-            return response.body();
 
         } catch (ProviderUnavailableException e) {
             throw e;
+        } catch (BoundedHttpBody.TooLargeException e) {
+            // Taşıma çalıştı, gelen ŞEY kullanılamaz — INVALID_PAYLOAD ile aynı raf.
+            throw new ProviderUnavailableException(
+                    ProviderUnavailableException.Reason.INVALID_PAYLOAD,
+                    "EVDS cevabi cok buyuk: " + e.getMessage(), e);
         } catch (java.net.http.HttpTimeoutException e) {
             throw new ProviderUnavailableException(
                     ProviderUnavailableException.Reason.TIMEOUT, "EVDS zaman asimi", e);

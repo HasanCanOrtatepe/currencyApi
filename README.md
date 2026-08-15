@@ -217,8 +217,15 @@ CRM_CURRENCY_CURRENCYAPI_API_KEY=<admin panelden üretilmiş anahtar>
 > `GET /api/v1/rates/preview` o sayfadaki panoyu besler. Önizleme ucu **ürünün yerine geçmez**
 > — yalnız birkaç para birimi ve yalnız `unitPrice` döner; çevrim yönü (`rate`), tazelik ve
 > sağlayıcı bilgisi yoktur. Anahtarsızdır çünkü herkese açık bir sayfaya anahtar gömmek onu
-> yakmak olurdu; buna karşılık **kota IP başına uygulanmaya devam eder** ve yeni bir TCMB
+> yakmak olurdu; buna karşılık **kota uygulanmaya devam eder** ve yeni bir TCMB
 > isteği üretmez (aynı 15 dakikalık cache'ten okur).
+>
+> Kotanın kime yazılacağı tünel arkasında `getRemoteAddr()` ile **belirlenemez**: konteynere
+> gelen bağlantının kaynağı tüm internet trafiği için aynıdır, yani sayaç tek bir kova olurdu
+> ve tek bir çağıran bu ucu herkes adına tüketebilirdi. Adres bu yüzden
+> `CURRENCY_CLIENT_IP_HEADER` ile bildirilen başlıktan (üretimde `CF-Connecting-IP`) okunur.
+> **Varsayılan boştur**: başlığa güvenmek, portun önünde onu kendisi yazan bir vekil olduğunu
+> bilmeyi gerektirir.
 
 ## Anahtar ve kota (ticari API davranışı)
 
@@ -236,7 +243,13 @@ curl -H "X-API-Key: <anahtar>" "localhost:8095/api/v1/rates?symbols=USD"
 | Anahtar yok / tanınmıyor | `401` — istek servise **inmez**, anahtar cevaba sızmaz |
 | Kota içinde | `200` + `X-RateLimit-Limit` / `X-RateLimit-Remaining` |
 | Kota aşıldı | `429` + `Retry-After` (tüketici ne zaman döneceğini tahmin etmek zorunda kalmaz) |
-| `/actuator/**` | anahtar istemez — orkestratörün elinde anahtar yoktur |
+| `/actuator/health` | anahtar istemez — orkestratörün elinde anahtar yoktur |
+| Diğer `/actuator/*` | anahtar **ister**; public kurulumda zaten yalnız `health` yayınlanır |
+
+**Başarısız anahtar denemesi de kota harcar.** Kota kontrolü 401'den **önce** işler: aksi hâlde
+anahtar denemesi sınırsız olurdu ve her deneme (dinamik anahtar biçimindeyse) bir Redis okuması
+harcatırdı. 256 bitlik anahtara kaba kuvvet zaten hesaplanamaz; kapatılan şey, anonim bir
+çağıranın servisten sınırsız iş çekebildiği yoldur.
 
 **Kota neden cömert:** düzgün davranan bir tüketici bu sınıra hiç yaklaşmaz. CRM ölçüldü
 (2026-08-12): kotası 3/dk'ya sabitlenmiş bir servise karşı **12 CRM isteği yalnız 1 üst istek**

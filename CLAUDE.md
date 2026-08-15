@@ -69,6 +69,11 @@ admin-ui/            Angular admin paneli — bağımsız npm projesi, Maven'a d
   `core/integrations/tcmb/dtos`, EVDS'in JSON'u `core/integrations/evds/dtos` içinde kalır;
   domaine mapper ile girer. Yeni sağlayıcı (ör. ECB) yalnız `core/integrations/<satıcı>/`
   altına eklenir + zincire yazılır; API sözleşmesi, cache ve iş katmanı DEĞİŞMEZ.
+- **Satıcı cevabı SINIRSIZ okunmaz.** Gövde `BoundedHttpBody` ile en çok 4 MB okunur
+  (`ofString()` boyuta bakmadan tamamını belleğe alırdı). Cevap ağdan gelir; devasa bir gövde
+  `-XX:+ExitOnOutOfMemoryError` altında sessiz bir yavaşlama değil, sürecin ölmesi ve her
+  istekte tekrarlanan bir kesinti demektir. `SecureXml` ile aynı gerekçe: dış yükün *biçimine*
+  değil, *bize ne yaptırabileceğine* bakılır.
 - **Kur yönü her sağlayıcının kendi mapper'ında biter** (`TcmbRateMapper`, `EvdsRateMapper`).
   Yön hatası sessizdir — ters çevrilmiş kur da geçerli bir pozitif sayıdır ve hiçbir
   doğrulamaya takılmaz. Tek koruma testtir; `EvdsRateMapperTest` ayrıca iki mapper'ın aynı
@@ -143,7 +148,7 @@ bu riskten muaftır (bellek içi) — Redis kesintisinde ayakta kalması gereken
 | Yüzey | Port | Sınır |
 |---|---|---|
 | Tüketici API (`/api/v1/rates`) | 8095 | İnternete açık (Cloudflare tüneli), `X-API-Key` ister |
-| Tanıtım sayfası (`/`) + önizleme (`/api/v1/rates/preview`) | 8095 | Anahtarsız, ama **kota IP başına uygulanır** |
+| Tanıtım sayfası (`/`) + önizleme (`/api/v1/rates/preview`) | 8095 | Anahtarsız, ama **kota istemci IP'si başına uygulanır** (bkz. aşağıdaki not) |
 | Admin API (`/admin/**`) | 8097 | **Yalnız loopback** (`127.0.0.1`); `X-Admin-Token` ister |
 | Admin panel (Angular) | 8096 | **Yalnız loopback** (`127.0.0.1`) |
 
@@ -157,6 +162,31 @@ ve makinenin güvenlik duvarı kapalıdır. Başka bir cihazdan yönetmek gereki
 sınırdır: tünel path değil TÜM portu yönlendirir. Token kontrolü bunun üzerine ikinci
 katmandır, tek başına sınır değildir. Admin kapalıyken `/admin/**` **404** döner (401 değil —
 401 o yüzeyin varlığını doğrulardı).
+
+**Dördüncü bir yüzey vardı ve görünmezdi: `/actuator`.** `ApiGuardFilter` başta `/actuator`
+önekinin TAMAMINI muaf tutuyordu; tünel de tüm portu taşıdığı için `/actuator/metrics`
+internete **anahtarsız ve kotasız** açıktı (canlıda ölçüldü: `jvm.info` → JDK sürümü,
+`disk.free`, `http.server.requests` → tüm uç listesi ve istek sayıları). Muafiyetin gerekçesi
+orkestratördü ama orkestratör yalnız **sağlık ucunu** sorar. Artık muaf olan yalnız
+`/actuator/health` (+ liveness/readiness sondaları); üstelik public instance `health` dışında
+hiçbir ucu **yayınlamaz** (`CURRENCY_ACTUATOR_EXPOSE`). Metrikler yalnız loopback'e bağlı
+admin instance'ında açıktır ve orada da anahtar ister. Genel kural: bir yolu `shouldNotFilter`'a
+eklerken **önek değil tam ad** yazılır — burada bedeli internete açık bir yüzeydi.
+
+**Kota kimliği tünel arkasında `getRemoteAddr()` DEĞİLDİR.** Konteynere gelen bağlantının
+kaynağı tüm internet trafiği için aynıdır (ölçüldü: `remote=10.89.0.3`), yani "kota IP başına"
+cümlesi pratikte "tek kova, tüm dünya" demekti: tek bir çağıran anahtarsız önizleme ucunu
+dakikada 120 istekle herkese `429` yaptırabiliyordu ve kötüye kullanım WARN'ı kimseyi işaret
+etmiyordu. Kimlik artık `currency-api.rate-limit.client-ip-header` ile okunur (üretimde
+`CF-Connecting-IP`; o başlığı cloudflared kendisi yazar, tünelden uydurulamaz). **Varsayılan
+BOŞTUR** — başlığa güvenmek, portun önünde onu yazan bir vekil olduğunu bilmeyi gerektirir;
+bilmeyen bir kurulum bunu devralmamalıdır. Değer yalnız **anonim** istekte kullanılır: anahtarlı
+tüketicinin kimliği adıdır, uydurulabilir bir alan onu ezemez.
+
+**Başarısız kimlik doğrulaması da kota harcar.** Sıra önce 401, sonra kotaydı; o hâliyle anahtar
+denemesi sınırsızdı ve dinamik anahtar biçimindeki her deneme bir Redis okuması harcatıyordu.
+256 bitlik anahtara kaba kuvvet zaten hesaplanamaz — kapatılan şey, anonim bir çağıranın
+servisten sınırsız iş çekebildiği tek yoldur.
 
 ### Simülatör — varsayılan KAPALI
 

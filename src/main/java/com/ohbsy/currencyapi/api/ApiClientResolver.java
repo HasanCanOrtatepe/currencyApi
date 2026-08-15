@@ -46,6 +46,9 @@ public class ApiClientResolver {
     /** {@code lastUsedAt} bu aralıktan sık güncellenmez — bkz. {@link #touchLastUsed}. */
     private static final Duration LAST_USED_RESOLUTION = Duration.ofMinutes(1);
 
+    /** IPv6'nın en uzun yazımı (IPv4 gömülü biçim dahil) 45 karakterdir. */
+    private static final int MAX_ADDRESS_LENGTH = 45;
+
     private final CurrencyApiProperties properties;
     private final ApiKeyStore apiKeyStore;
     private final Clock clock;
@@ -117,21 +120,55 @@ public class ApiClientResolver {
                         touchLastUsed(record).rateLimitOverride(), record.id()));
     }
 
-    /** İstekteki anahtara karşılık gelen tüketici adı; anahtar yok/tanınmıyorsa boş. */
-    public Optional<String> resolve(HttpServletRequest request) {
-        return resolveClient(request).map(ResolvedClient::consumerName);
+    /**
+     * Anonim isteğin hız sınırı kimliği — <b>çağıranın adresi</b>.
+     *
+     * <h2>Neden {@code getRemoteAddr()} tek başına yetmiyor (ölçülerek bulundu)</h2>
+     * Servis bir tünelin (Cloudflare) arkasındadır ve konteynere gelen bağlantının kaynağı
+     * HER İNTERNET İSTEĞİ İÇİN AYNI adrestir (ölçüldü: {@code remote=10.89.0.3}). Yani
+     * "kota IP başına" cümlesi üretimde <b>doğru değildi</b>: tüm dünya tek bir kovayı
+     * paylaşıyordu ve tek bir çağıran, anahtarsız önizleme ucunu dakikada 120 istekle
+     * herkese 429 yaptırabiliyordu. Kötüye kullanım WARN'ı da kimseyi işaret etmiyordu.
+     *
+     * <h2>Başlığa neden güvenilebiliyor — ve nerede güvenilemez</h2>
+     * Başlık adı <b>yapılandırmadan</b> gelir ({@code currency-api.rate-limit.client-ip-header})
+     * ve varsayılanı BOŞTUR: hiçbir kurulum bunu istemeden devralmaz. Üretimde
+     * {@code CF-Connecting-IP} verilir; bu başlığı cloudflared her istekte kendisi YAZAR,
+     * yani tünelden geçen bir istemci onu uyduramaz. Portu doğrudan güvenilmeyen bir ağa açan
+     * bir kurulumda bu ayar <b>verilmemelidir</b> — orada başlık uydurulabilir ve sınır
+     * her istekte yeni bir kimlikle atlatılabilirdi.
+     *
+     * <p>Değer yalnız anonim istekte kullanılır; anahtarla gelen tüketicinin kimliği adıdır.
+     * Uydurulabilir bir alanın yarıçapı böylece anahtarsız uçla sınırlı kalır.
+     */
+    public String clientIp(HttpServletRequest request) {
+        String headerName = properties.getRateLimit().getClientIpHeader();
+        if (headerName.isBlank()) {
+            return request.getRemoteAddr();
+        }
+        String value = request.getHeader(headerName);
+        if (value == null || value.isBlank()) {
+            return request.getRemoteAddr();
+        }
+        // X-Forwarded-For biçimi liste olabilir ("istemci, vekil1, vekil2"); istemci baştadır.
+        String candidate = value.split(",", 2)[0].trim();
+        return isPlausibleAddress(candidate) ? candidate : request.getRemoteAddr();
     }
 
     /**
-     * Hız sınırının sayacı hangi kimliğe yazılacak.
-     *
-     * <p>Kimlik doğrulama kapalıyken <b>uzak adrese</b> düşülür: sınırın hiç uygulanmaması,
-     * kaçak bir döngünün serbest kalması demek olurdu. Mükemmel bir kimlik değildir (NAT
-     * arkasında tüm tüketiciler tek adres görünür) ama sınırın amacı kimlik doğrulamak değil,
-     * yarıçapı sınırlamaktır.
+     * Değer bir hız sınırı kimliğine, oradan da <b>Redis anahtarına ve log satırına</b> girer.
+     * Doğrulanmasaydı satır sonu içeren bir başlık log'a sahte satır yazdırabilir
+     * ({@code CorrelationIdFilter} ile aynı gerekçe), uzun/keyfi bir değer de anahtar alanını
+     * şişirebilirdi. IPv4/IPv6 yazımı için gereken karakterler bunlardır, fazlası değil.
      */
-    public String rateLimitIdentity(HttpServletRequest request) {
-        return resolve(request).orElseGet(() -> "ip:" + request.getRemoteAddr());
+    private static boolean isPlausibleAddress(String value) {
+        if (value.isEmpty() || value.length() > MAX_ADDRESS_LENGTH) {
+            return false;
+        }
+        return value.chars().allMatch(ch ->
+                (ch >= '0' && ch <= '9')
+                        || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')
+                        || ch == '.' || ch == ':');
     }
 
     /**

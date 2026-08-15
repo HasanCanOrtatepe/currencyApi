@@ -132,14 +132,46 @@ class ApiGuardFilterTest {
 
     /**
      * Orkestratörün elinde anahtar YOKTUR. Sağlık ucu anahtar isteseydi her kurulum sağlıksız
-     * görünür ve orkestratör çalışan servisi sürekli yeniden başlatırdı.
+     * görünür ve orkestratör çalışan servisi sürekli yeniden başlatırdı. Sondalar
+     * (liveness/readiness) aynı gerekçeyle muaftır.
      */
     @Test
-    @DisplayName("/actuator anahtar istemez (orkestratör muafiyeti)")
-    void actuatorIsExempt() {
-        MockHttpServletRequest health = new MockHttpServletRequest("GET", "/actuator/health");
+    @DisplayName("/actuator/health ve sondaları anahtar istemez (orkestratör muafiyeti)")
+    void healthEndpointIsExempt() {
+        for (String path : new String[] {"/actuator/health",
+                "/actuator/health/liveness", "/actuator/health/readiness"}) {
+            assertThat(filter.shouldNotFilter(new MockHttpServletRequest("GET", path)))
+                    .as("muaf olmalı: %s", path)
+                    .isTrue();
+        }
+    }
 
-        assertThat(filter.shouldNotFilter(health)).isTrue();
+    /**
+     * Muafiyet önce {@code /actuator} önekinin TAMAMINAydı ve public portta ölçülerek
+     * doğrulanmış bir sızıntıydı: {@code /actuator/metrics} anahtarsız cevap veriyor, JDK
+     * sürümünü ({@code jvm.info}), disk boşluğunu ve {@code http.server.requests} üzerinden
+     * tüm uç listesini dışarı veriyordu. Üstelik filtreden çıktığı için KOTASIZDI.
+     */
+    @Test
+    @DisplayName("Sağlık DIŞINDAKİ actuator yolları muaf DEĞİLDİR")
+    void nonHealthActuatorPathsAreNotExempt() {
+        for (String path : new String[] {"/actuator", "/actuator/metrics", "/actuator/info",
+                "/actuator/metrics/jvm.info", "/actuator/health-detay"}) {
+            assertThat(filter.shouldNotFilter(new MockHttpServletRequest("GET", path)))
+                    .as("kapıdan geçmeli: %s", path)
+                    .isFalse();
+        }
+    }
+
+    @Test
+    @DisplayName("/actuator/metrics anahtarsız çağrılınca 401 alır")
+    void metricsRequiresKey() throws Exception {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(new MockHttpServletRequest("GET", "/actuator/metrics"), response,
+                new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
     }
 
     /**
@@ -215,6 +247,103 @@ class ApiGuardFilterTest {
         filter.doFilter(request(null), response, new MockFilterChain());
 
         assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    /**
+     * Sıra tersken (401 önce, kota sonra) başarısız kimlik doğrulaması hiç sayılmıyordu:
+     * anahtar denemesi SINIRSIZDI ve dinamik anahtar biçimindeki her deneme ayrıca bir Redis
+     * okuması harcatıyordu. Kapatılan şey kaba kuvvet değil (256 bitlik anahtara zaten
+     * hesaplanamaz), anonim bir çağıranın servisten sınırsız iş çekebildiği tek yoldur.
+     */
+    @Test
+    @DisplayName("Başarısız anahtar denemesi de kota harcar → sonunda 401 değil 429")
+    void failedAuthConsumesQuota() throws Exception {
+        properties.getRateLimit().setLimit(2);
+
+        for (int i = 0; i < 2; i++) {
+            MockHttpServletResponse rejected = new MockHttpServletResponse();
+            filter.doFilter(request("yanlis-anahtar"), rejected, new MockFilterChain());
+            assertThat(rejected.getStatus()).isEqualTo(401);
+        }
+
+        MockHttpServletResponse blocked = new MockHttpServletResponse();
+        filter.doFilter(request("yanlis-anahtar"), blocked, new MockFilterChain());
+
+        assertThat(blocked.getStatus()).isEqualTo(429);
+        assertThat(blocked.getHeader("Retry-After")).isNotNull();
+    }
+
+    /**
+     * Tünel arkasında {@code getRemoteAddr()} her internet isteği için AYNI adresi verir; o
+     * hâliyle "kota IP başına" cümlesi üretimde doğru değildi ve tek bir çağıran anahtarsız
+     * ucu herkes adına tüketebiliyordu. Başlık YALNIZ anonim istekte okunur.
+     */
+    @Nested
+    @DisplayName("Anonim kimlik — istemci adresi")
+    class ClientIdentity {
+
+        private MockHttpServletRequest preview(String forwardedIp) {
+            MockHttpServletRequest request =
+                    new MockHttpServletRequest("GET", "/api/v1/rates/preview");
+            request.setRemoteAddr("10.89.0.3");   // tünel arkasında herkes için AYNI
+            if (forwardedIp != null) {
+                request.addHeader("CF-Connecting-IP", forwardedIp);
+            }
+            return request;
+        }
+
+        @Test
+        @DisplayName("Başlık yapılandırıldığında farklı istemciler AYRI kovalara yazılır")
+        void separateBucketsPerClient() throws Exception {
+            properties.getRateLimit().setClientIpHeader("CF-Connecting-IP");
+            properties.getRateLimit().setLimit(1);
+
+            MockHttpServletResponse first = new MockHttpServletResponse();
+            filter.doFilter(preview("203.0.113.7"), first, new MockFilterChain());
+            MockHttpServletResponse second = new MockHttpServletResponse();
+            filter.doFilter(preview("203.0.113.8"), second, new MockFilterChain());
+
+            assertThat(first.getStatus()).isEqualTo(200);
+            // Kotayı ilk istemci doldurdu; ikincisi bundan ETKİLENMEMELİ.
+            assertThat(second.getStatus()).isEqualTo(200);
+
+            MockHttpServletResponse repeat = new MockHttpServletResponse();
+            filter.doFilter(preview("203.0.113.7"), repeat, new MockFilterChain());
+            assertThat(repeat.getStatus()).isEqualTo(429);
+        }
+
+        @Test
+        @DisplayName("Başlık yapılandırılmadıysa okunmaz — güvenmek bilinçli bir karardır")
+        void headerIgnoredWhenNotConfigured() throws Exception {
+            properties.getRateLimit().setLimit(1);
+
+            MockHttpServletResponse first = new MockHttpServletResponse();
+            filter.doFilter(preview("203.0.113.7"), first, new MockFilterChain());
+            MockHttpServletResponse second = new MockHttpServletResponse();
+            filter.doFilter(preview("203.0.113.8"), second, new MockFilterChain());
+
+            assertThat(first.getStatus()).isEqualTo(200);
+            assertThat(second.getStatus()).isEqualTo(429);
+        }
+
+        /** Anahtarla gelen tüketicinin kimliği ADIDIR; uydurulabilir bir alan onu ezemez. */
+        @Test
+        @DisplayName("Anahtarlı istekte başlık kimliği DEĞİŞTİRMEZ")
+        void authenticatedIdentityIgnoresHeader() throws Exception {
+            properties.getRateLimit().setClientIpHeader("CF-Connecting-IP");
+            properties.getRateLimit().setLimit(1);
+
+            MockHttpServletRequest first = request("gizli-anahtar");
+            first.addHeader("CF-Connecting-IP", "203.0.113.7");
+            filter.doFilter(first, new MockHttpServletResponse(), new MockFilterChain());
+
+            MockHttpServletRequest second = request("gizli-anahtar");
+            second.addHeader("CF-Connecting-IP", "203.0.113.8");
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            filter.doFilter(second, response, new MockFilterChain());
+
+            assertThat(response.getStatus()).isEqualTo(429);
+        }
     }
 
     @Test
