@@ -1,5 +1,6 @@
 package com.ohbsy.currencyapi.core.integrations;
 
+import com.ohbsy.currencyapi.core.integrations.ecb.EcbExchangeRateProvider;
 import com.ohbsy.currencyapi.core.integrations.evds.EvdsExchangeRateProvider;
 import com.ohbsy.currencyapi.core.integrations.tcmb.TcmbExchangeRateProvider;
 import com.ohbsy.currencyapi.entities.ExchangeRateSnapshot;
@@ -27,19 +28,27 @@ import java.util.List;
  *       sorusunu cevaplayabilen tek yol budur.</li>
  *   <li><b>Bugünkü (yedek) — {@code today.xml}.</b> Anahtar istemez. Sayıları EVDS ile
  *       aynıdır, yalnız tarih etiketi bir gün geriden gelir.</li>
+ *   <li><b>Bugünkü (bağımsız) — ECB.</b> İlk iki basamak <b>aynı kurumun</b> iki kapısıdır ve
+ *       o kurum erişilemez olduğunda ikisi birden düşer; ECB farklı bir kurumdur. Yalnız
+ *       BUGÜNÜN belgesine sahipse konuşur — aksi hâlde her hafta sonu sunulan kur TCMB'den
+ *       ECB'ye atlardı. <b>Varsayılan kapalıdır</b> ({@code CURRENCY_ECB_ENABLED}).</li>
  *   <li><b>Dünkü — burada DEĞİL.</b> Son geçerli kur {@code ExchangeRateServiceImpl}'in
  *       cache basamağıdır ({@code STALE_CACHE}) ve orada kalır: zincir de kendi bayat-kur
  *       mantığını yazsaydı kural iki yerde, muhtemelen farklı biçimde dururdu.</li>
  * </ol>
  *
- * <h2>{@code name()} zincire göre DEĞİŞMEZ</h2>
- * Sağlayıcı adı cache anahtarıdır ({@code RateCache.find(provider.name())}) ve cevaptaki
- * {@code provider} alanıdır. Hangi yolun konuştuğuna göre değişseydi iki gerçek arıza doğardı:
- * her yol değişiminde cache <b>bölünür</b> (aynı kur iki kez tutulur, devreye girişte boşuna
- * satıcıya gidilir), ve tüketicinin gördüğü {@code provider} alanı bizim iç yol seçimimize
- * göre oynardı. Ad {@code tcmb}'de sabittir ve bu <b>dürüsttür</b>: iki yol da aynı kurumun
- * aynı resmî satış kurudur, farklı olan yalnız kapıdır. Hangi kapıdan girildiği log'dadır —
- * orası tanılamanın yeridir, sözleşme değil.
+ * <h2>{@code name()} zincire göre DEĞİŞMEZ — ama artık cevaptaki ad ondan gelmez</h2>
+ * Bu ad <b>cache yuvasının kimliğidir</b> ({@code RateCache.find(provider.name())}) ve
+ * {@code tcmb}'de sabittir. Yola göre değişseydi cache <b>bölünürdü</b>: ECB'ye düşülen bir
+ * gün TCMB'nin kaydı ayrı bir yuvada eskimeye devam eder, TCMB döndüğünde elimizde farklı
+ * yaşlarda iki tablo olurdu. Tek yuva, "şu an sunulan kur tablosu" demektir.
+ *
+ * <p><b>Cevaptaki {@code provider} alanı ise kaydın KENDİSİNDEN okunur</b>
+ * ({@code ExchangeRateSnapshot.source}) ve gerçekten değişir. İki kural çelişmez, çünkü
+ * cevapladıkları soru farklıdır: cache yuvası "bu tabloyu nereye koyayım", {@code source}
+ * "bu sayıyı kim yayınladı". İlk iki basamak için ikisi aynı kurumu gösterir (yalnız kapı
+ * farklıdır, sözleşmeye girmez — o ayrım log'dadır); ECB için göstermez ve <b>göstermemelidir</b>:
+ * ECB'nin referans kuru ile TCMB'nin resmî satış kuru aynı sayı değildir.
  *
  * <h2>Sıra kodda, anotasyonda değil</h2>
  * Zincir {@code List<ExchangeRateProvider>} enjeksiyonu + {@code @Order} ile de kurulabilirdi.
@@ -62,12 +71,36 @@ public class ChainedExchangeRateProvider implements ExchangeRateProvider {
      */
     @org.springframework.beans.factory.annotation.Autowired
     public ChainedExchangeRateProvider(EvdsExchangeRateProvider evds,
-                                       TcmbExchangeRateProvider tcmb) {
-        this(evds.isConfigured() ? List.of(evds, tcmb) : List.of(tcmb));
+                                       TcmbExchangeRateProvider tcmb,
+                                       EcbExchangeRateProvider ecb) {
+        this(assemble(evds, tcmb, ecb));
         if (!evds.isConfigured()) {
             log.info("EVDS anahtari tanimsiz (CURRENCY_EVDS_KEY) — yalniz {} kullanilacak, "
                     + "bulten tarihi bir gun geriden gelebilir", TcmbExchangeRateProvider.NAME);
         }
+        if (!ecb.isEnabled()) {
+            log.info("ECB kapali (CURRENCY_ECB_ENABLED) — TCMB'nin iki yolu da dustugunde "
+                    + "servis yalniz son gecerli kuru sunar");
+        }
+    }
+
+    /**
+     * Kapalı basamaklar zincire <b>hiç konmaz</b>, her çağrıda atlanmaz: kapalı bir sağlayıcı
+     * listede dursaydı her istekte bir istisna üretip yakalanır ve "atlanan" listesine girerdi —
+     * yani normal çalışma, log'da arıza gibi görünürdü.
+     */
+    private static List<ExchangeRateProvider> assemble(EvdsExchangeRateProvider evds,
+                                                       TcmbExchangeRateProvider tcmb,
+                                                       EcbExchangeRateProvider ecb) {
+        List<ExchangeRateProvider> providers = new ArrayList<>(3);
+        if (evds.isConfigured()) {
+            providers.add(evds);
+        }
+        providers.add(tcmb);
+        if (ecb.isEnabled()) {
+            providers.add(ecb);
+        }
+        return List.copyOf(providers);
     }
 
     private ChainedExchangeRateProvider(List<ExchangeRateProvider> chain) {
@@ -79,6 +112,15 @@ public class ChainedExchangeRateProvider implements ExchangeRateProvider {
     /** Testler için: zinciri doğrudan kurar. Spring bu yolu görmez (kurucu private'tır). */
     static ChainedExchangeRateProvider of(ExchangeRateProvider... providers) {
         return new ChainedExchangeRateProvider(List.of(providers));
+    }
+
+    /**
+     * Testler için: kurulmuş zincirin sırası. Öncelik bu servisin en kritik kararlarından
+     * biridir (bkz. sınıf açıklaması) ve yalnız davranış üzerinden sınanamaz — kapalı bir
+     * basamağın zincire hiç KONMADIĞI, ancak listeye bakarak doğrulanabilir.
+     */
+    List<String> chainNames() {
+        return chain.stream().map(ExchangeRateProvider::name).toList();
     }
 
     @Override

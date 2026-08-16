@@ -21,6 +21,7 @@ public class CurrencyApiProperties {
     private final Cache cache = new Cache();
     private final Tcmb tcmb = new Tcmb();
     private final Evds evds = new Evds();
+    private final Ecb ecb = new Ecb();
     private final Auth auth = new Auth();
     private final RateLimit rateLimit = new RateLimit();
     private final Admin admin = new Admin();
@@ -36,6 +37,10 @@ public class CurrencyApiProperties {
 
     public Evds getEvds() {
         return evds;
+    }
+
+    public Ecb getEcb() {
+        return ecb;
     }
 
     public Auth getAuth() {
@@ -352,6 +357,65 @@ public class CurrencyApiProperties {
 
         public void setLookback(Duration lookback) {
             this.lookback = lookback;
+        }
+
+        public Duration getConnectTimeout() {
+            return connectTimeout;
+        }
+
+        public void setConnectTimeout(Duration connectTimeout) {
+            this.connectTimeout = connectTimeout;
+        }
+
+        public Duration getReadTimeout() {
+            return readTimeout;
+        }
+
+        public void setReadTimeout(Duration readTimeout) {
+            this.readTimeout = readTimeout;
+        }
+    }
+
+    /**
+     * ECB sağlayıcısının ayarları — Avrupa Merkez Bankası, zincirin son ve tek <b>bağımsız</b>
+     * basamağı.
+     *
+     * <p><b>Neden {@link #enabled} bayrağı var, EVDS'te yokken:</b> EVDS'te anahtarın kendisi
+     * düğmedir ("açık ama anahtarsız" çelişkisi kurulamaz). ECB anahtar istemez, yani orada
+     * kullanılan hile burada kurulamaz ve açık bir bayrak gerekir.
+     *
+     * <p><b>Varsayılan KAPALI ve bu bilinçlidir:</b> bu sağlayıcı devreye girdiğinde tüketiciye
+     * sunulan sayı <b>başka bir kurumun</b> kuru olur (ECB referans kuru ≠ TCMB resmî satış
+     * kuru). Görünürdür — cevapta {@code provider: "ecb"} yazar — ama yine de bir davranış
+     * değişikliğidir ve bunu bilmeyen bir kurulum, imaj güncellemesiyle sessizce devralmamalıdır
+     * ({@code Auth.enabled} ve {@code RateLimit.clientIpHeader} ile aynı ilke).
+     */
+    public static class Ecb {
+
+        private boolean enabled = false;
+
+        private String baseUrl = "https://www.ecb.europa.eu";
+
+        private Duration connectTimeout = Duration.ofSeconds(5);
+        private Duration readTimeout = Duration.ofSeconds(10);
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        /** Boş değer varsayılanı EZMEZ — {@link Tcmb#setBaseUrl} ile aynı konteyner tuzağı. */
+        public void setBaseUrl(String baseUrl) {
+            if (baseUrl != null && !baseUrl.isBlank()) {
+                this.baseUrl = baseUrl.trim();
+            }
         }
 
         public Duration getConnectTimeout() {

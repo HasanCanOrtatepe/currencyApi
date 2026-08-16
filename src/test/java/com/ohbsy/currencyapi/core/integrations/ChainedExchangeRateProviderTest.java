@@ -1,6 +1,16 @@
 package com.ohbsy.currencyapi.core.integrations;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ohbsy.currencyapi.config.CurrencyApiProperties;
+import com.ohbsy.currencyapi.core.integrations.ecb.EcbExchangeRateProvider;
+import com.ohbsy.currencyapi.core.integrations.ecb.EcbRateMapper;
+import com.ohbsy.currencyapi.core.integrations.ecb.EcbXmlReader;
+import com.ohbsy.currencyapi.core.integrations.evds.EvdsExchangeRateProvider;
+import com.ohbsy.currencyapi.core.integrations.evds.EvdsJsonReader;
+import com.ohbsy.currencyapi.core.integrations.evds.EvdsRateMapper;
 import com.ohbsy.currencyapi.core.integrations.tcmb.TcmbExchangeRateProvider;
+import com.ohbsy.currencyapi.core.integrations.tcmb.TcmbRateMapper;
+import com.ohbsy.currencyapi.core.integrations.tcmb.TcmbXmlReader;
 import com.ohbsy.currencyapi.entities.CurrencyCode;
 import com.ohbsy.currencyapi.entities.ExchangeRateSnapshot;
 import org.junit.jupiter.api.DisplayName;
@@ -8,11 +18,13 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -31,7 +43,8 @@ class ChainedExchangeRateProviderTest {
                 CurrencyCode.TRY,
                 Map.of(CurrencyCode.USD, new BigDecimal("0.0209328954")),
                 rateDate,
-                Instant.parse("2026-08-14T07:21:41Z"));
+                Instant.parse("2026-08-14T07:21:41Z"),
+                TcmbExchangeRateProvider.NAME);
     }
 
     /** Sırayı da kaydeden sahte sağlayıcı — "kim, kaç kez çağrıldı" sorusu için. */
@@ -187,12 +200,16 @@ class ChainedExchangeRateProviderTest {
     }
 
     /**
-     * <b>Ad cache anahtarıdır</b> ({@code RateCache.find(provider.name())}) ve cevaptaki
-     * {@code provider} alanıdır. Hangi yolun konuştuğuna göre değişseydi cache her yol
-     * değişiminde bölünür, tüketicinin gördüğü alan da iç yol seçimimize göre oynardı.
+     * <b>Ad CACHE YUVASININ kimliğidir</b> ({@code RateCache.find(provider.name())}). Hangi
+     * yolun konuştuğuna göre değişseydi cache bölünürdü: ECB'ye düşülen bir gün TCMB'nin kaydı
+     * ayrı bir yuvada eskimeye devam eder, TCMB döndüğünde elimizde farklı yaşlarda iki tablo
+     * olurdu.
+     *
+     * <p>Cevaptaki {@code provider} alanı buradan DEĞİL, kaydın kendisinden gelir
+     * ({@code ExchangeRateSnapshot.source}) — bkz. {@code ExchangeRateServiceImpl}.
      */
     @Test
-    @DisplayName("name() hangi yolun konuştuğuna göre DEĞİŞMEZ — cache anahtarı kararlı")
+    @DisplayName("name() hangi yolun konuştuğuna göre DEĞİŞMEZ — cache yuvası kararlı")
     void nameIsStableAcrossFailover() {
         List<String> calls = new ArrayList<>();
         var viaEvds = ChainedExchangeRateProvider.of(
@@ -205,5 +222,76 @@ class ChainedExchangeRateProviderTest {
         assertThat(viaEvds.name())
                 .isEqualTo(viaTcmb.name())
                 .isEqualTo(TcmbExchangeRateProvider.NAME);
+    }
+
+    /**
+     * <b>Zincirin KURULUŞU</b> — hangi basamağın listeye girdiği. Davranış testleri sırayı
+     * sınar; burada sınanan şey, kapalı bir basamağın zincire <b>hiç konmadığıdır</b>. Listede
+     * dursaydı her istekte bir istisna üretip yakalanır, "atlanan sağlayıcı" olarak loglanır
+     * ve normal çalışma arıza gibi görünürdü.
+     */
+    @Nested
+    @DisplayName("zincirin kuruluşu — açık/kapalı basamaklar")
+    class Assembly {
+
+        private static final Clock CLOCK =
+                Clock.fixed(Instant.parse("2026-08-14T09:00:00Z"), ZoneOffset.UTC);
+
+        private ChainedExchangeRateProvider chainOf(String evdsKey, boolean ecbEnabled) {
+            CurrencyApiProperties properties = new CurrencyApiProperties();
+            properties.getEvds().setKey(evdsKey);
+            properties.getEcb().setEnabled(ecbEnabled);
+
+            return new ChainedExchangeRateProvider(
+                    new EvdsExchangeRateProvider(properties,
+                            new EvdsJsonReader(new ObjectMapper()),
+                            new EvdsRateMapper(CLOCK), CLOCK),
+                    new TcmbExchangeRateProvider(properties,
+                            new TcmbXmlReader(), new TcmbRateMapper(CLOCK)),
+                    new EcbExchangeRateProvider(properties,
+                            new EcbXmlReader(), new EcbRateMapper(CLOCK)));
+        }
+
+        @Test
+        @DisplayName("hepsi açıkken sıra: evds → tcmb → ecb")
+        void fullChainIsOrderedNewestToIndependent() {
+            assertThat(chainOf("anahtar", true).chainNames())
+                    .containsExactly("evds", "tcmb", "ecb");
+        }
+
+        @Test
+        @DisplayName("ECB kapalıyken zincirde YOKTUR (varsayılan)")
+        void omitsEcbWhenDisabled() {
+            assertThat(chainOf("anahtar", false).chainNames())
+                    .containsExactly("evds", "tcmb");
+        }
+
+        @Test
+        @DisplayName("EVDS anahtarsızken zincirde YOKTUR")
+        void omitsEvdsWhenUnconfigured() {
+            assertThat(chainOf("", true).chainNames())
+                    .containsExactly("tcmb", "ecb");
+        }
+
+        /** Hiçbir yapılandırma verilmeden servis yine kur sunar: today.xml tek başına yeter. */
+        @Test
+        @DisplayName("hiçbiri yapılandırılmamışsa geriye today.xml kalır")
+        void alwaysKeepsTcmbDocumentPath() {
+            assertThat(chainOf("", false).chainNames())
+                    .containsExactly("tcmb");
+        }
+
+        /**
+         * ECB zincirin SONUNDADIR ve bu bir öncelik kararıdır: TRY için resmî kuru TCMB
+         * belirler, ECB'nin referans kuru yakın ama aynı sayı değildir ve iki bölmeyle elde
+         * edilir. İkisi de varken TCMB seçilmelidir — ECB "hiç kur yok"a karşı sigortadır.
+         */
+        @Test
+        @DisplayName("ECB her zaman TCMB'den SONRA gelir")
+        void ecbNeverPrecedesTcmb() {
+            List<String> names = chainOf("anahtar", true).chainNames();
+
+            assertThat(names.indexOf("ecb")).isGreaterThan(names.indexOf("tcmb"));
+        }
     }
 }

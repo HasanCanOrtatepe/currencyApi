@@ -51,18 +51,27 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
         this.clock = clock;
     }
 
+    /**
+     * <b>Cache yuvası {@code provider.name()}, cevaptaki kaynak {@code snapshot.source()}.</b>
+     * İkisi bilinçli olarak farklı yerlerden gelir: yuva "bu tabloyu nereye koyayım" sorusunun
+     * cevabıdır ve tektir (bkz. {@code ChainedExchangeRateProvider}); {@code source} ise
+     * "bu sayıyı kim yayınladı" sorusunundur ve zincir ECB'ye düştüğünde gerçekten değişir.
+     * Yuvadan türetilseydi, ECB'den gelen bir tablo tüketiciye {@code provider: "tcmb"} diye
+     * sunulurdu — sessiz ve yakalanamaz bir yanlışlık.
+     */
     @Override
     public RateResult currentRates() {
         Optional<ExchangeRateSnapshot> cached = cache.find(provider.name());
 
         if (cached.isPresent() && isFresh(cached.get())) {
-            return new RateResult(cached.get(), RateResult.Status.FRESH_CACHE, provider.name());
+            return new RateResult(cached.get(), RateResult.Status.FRESH_CACHE,
+                    cached.get().source());
         }
 
         try {
             ExchangeRateSnapshot fetched = provider.fetchLatestRates();
             cache.put(provider.name(), fetched);
-            return new RateResult(fetched, RateResult.Status.FRESH_PROVIDER, provider.name());
+            return new RateResult(fetched, RateResult.Status.FRESH_PROVIDER, fetched.source());
         } catch (ProviderUnavailableException e) {
             return fallback(cached, e);
         }
@@ -93,7 +102,8 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
                         provider.name(), cached.get().rateDate(), failure.getReason(),
                         failure.toString());
             }
-            return new RateResult(cached.get(), RateResult.Status.STALE_CACHE, provider.name());
+            return new RateResult(cached.get(), RateResult.Status.STALE_CACHE,
+                    cached.get().source());
         }
 
         log.error("kur yok: saglayici erisilemez ve cache bos provider={} sebep={}",

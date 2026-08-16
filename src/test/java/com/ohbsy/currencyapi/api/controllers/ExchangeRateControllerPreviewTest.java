@@ -36,7 +36,8 @@ class ExchangeRateControllerPreviewTest {
                         CurrencyCode.EUR, new BigDecimal("0.0181495450"),
                         CurrencyCode.CHF, new BigDecimal("0.0170000000")),
                 LocalDate.of(2026, 8, 13),
-                FETCHED);
+                FETCHED,
+                "tcmb");
     }
 
     private ExchangeRateControllerPreviewTest.Stub stubWith(RateResult result) {

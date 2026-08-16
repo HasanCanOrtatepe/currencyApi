@@ -2,6 +2,7 @@ package com.ohbsy.currencyapi.core.integrations.evds;
 
 import com.ohbsy.currencyapi.core.integrations.evds.dtos.EvdsObservation;
 import com.ohbsy.currencyapi.core.integrations.evds.dtos.EvdsSeriesDocument;
+import com.ohbsy.currencyapi.core.integrations.tcmb.TcmbExchangeRateProvider;
 import com.ohbsy.currencyapi.entities.CurrencyCode;
 import com.ohbsy.currencyapi.entities.ExchangeRateSnapshot;
 import org.slf4j.Logger;
@@ -116,7 +117,11 @@ public class EvdsRateMapper {
         quotedCurrencies().forEach(code ->
                 rates.put(code, inverseRate(newest.day().valueOf(columnNameOf(code)), code)));
 
-        return new ExchangeRateSnapshot(CurrencyCode.TRY, rates, newest.date(), clock.instant());
+        // Kaynak "evds" DEĞİL "tcmb": EVDS bir KAPI'dır, kurumu değil. Sayılar today.xml ile
+        // birebir aynıdır (ölçüldü) — bu alan sayının kimin sayısı olduğunu söyler, hangi
+        // kapıdan girildiğini değil. Hangi kapı olduğu log'dadır.
+        return new ExchangeRateSnapshot(CurrencyCode.TRY, rates, newest.date(), clock.instant(),
+                TcmbExchangeRateProvider.NAME);
     }
 
     /**

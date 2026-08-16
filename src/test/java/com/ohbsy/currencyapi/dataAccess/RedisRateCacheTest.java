@@ -56,7 +56,8 @@ class RedisRateCacheTest {
                 CurrencyCode.TRY,
                 Map.of(CurrencyCode.USD, new BigDecimal("0.0209")),
                 LocalDate.of(2026, 8, 12),
-                Instant.parse("2026-08-12T10:00:00Z"));
+                Instant.parse("2026-08-12T10:00:00Z"),
+                "tcmb");
     }
 
     /** Tek anahtar kullanılsaydı ECB'ye düşen bir cevap TCMB'nin kaydını ezerdi. */

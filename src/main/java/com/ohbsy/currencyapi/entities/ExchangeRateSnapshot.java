@@ -33,12 +33,20 @@ import java.util.Set;
  * @param fetchedAt  <b>bizim çekme anımız</b> — tazelik bununla ölçülür, {@code rateDate} ile
  *                   değil. İkisini karıştırmak, cuma çekilen kurun cumartesi "bayat" sayılıp
  *                   satıcıya boşuna gitmesine yol açardı (TCMB o gün zaten yeni veri vermez).
+ * @param source     <b>bu sayıları kim yayınladı</b> ({@code tcmb} | {@code evds} | {@code ecb}).
+ *                   Kaydın kendisinde durur, sağlayıcı nesnesinde değil: kur cache'e yazılır ve
+ *                   cache'ten okunduğunda "bunu kim söylemişti" sorusu hâlâ cevaplanabilmelidir.
+ *                   <b>Bu alan bir etiket değil, sayının anlamının parçasıdır:</b> TCMB'nin
+ *                   resmî satış kuru ile ECB'nin referans kuru aynı sayı DEĞİLDİR ve birini
+ *                   diğerinin adıyla sunmak, bu servisin bütün kurallarının kapatmaya çalıştığı
+ *                   "hata vermeden yanlış çalışma" biçiminin ta kendisi olurdu.
  */
 public record ExchangeRateSnapshot(
         CurrencyCode base,
         Map<CurrencyCode, BigDecimal> rates,
         LocalDate rateDate,
-        Instant fetchedAt
+        Instant fetchedAt,
+        String source
 ) implements Serializable {
 
     /** Kur bölme sonucudur; ölçek verilmezse {@code BigDecimal.divide} istisna fırlatır. */
@@ -57,6 +65,15 @@ public record ExchangeRateSnapshot(
         if (rateDate == null || fetchedAt == null) {
             throw new IllegalArgumentException("rateDate ve fetchedAt zorunludur");
         }
+        // Kaynaksız kayıt kabul EDİLMEZ ve varsayılana da düşülmez. Bu alan Redis'ten okunan
+        // ESKİ kayıtlarda yoktur (alan sonradan eklendi): orada null gelir, bu satır patlar ve
+        // RedisRateCache onu fail-open ile cache-miss sayar — yani en fazla bir kez satıcıya
+        // gidilir. Alternatif "yoksa tcmb varsay" olurdu; o, kaydı gerçekten ECB yazmışsa
+        // sessizce yanlış kurumu göstermek demekti.
+        if (source == null || source.isBlank()) {
+            throw new IllegalArgumentException("Kur kaydinin kaynagi (source) zorunludur");
+        }
+        source = source.trim();
         rates = sanitize(base, rates);
         if (rates.isEmpty()) {
             throw new IllegalArgumentException("Kur tablosu en az bir baz-dışı kur içermelidir");

@@ -51,6 +51,12 @@ services:
       # today.xml'den oluşur ve servis çalışmaya devam eder, yalnız bülten tarihi bir gün
       # geriden gelir. Anahtar .env'den gelir, bu dosyaya YAZILMAZ.
       CURRENCY_EVDS_KEY: ${CURRENCY_EVDS_KEY:-}
+      # ECB — zincirin son basamağı. Anahtar istemez. TCMB'nin İKİ yolu da düştüğünde devreye
+      # girer ve yalnız BUGÜNÜN kuruna sahipse konuşur; hafta sonu susar (o iş cache'in 7
+      # günlük saklamasınındır). Açıkken sunulan kur ECB'nin referans kuru olabilir — cevapta
+      # provider: "ecb" ile görünür.
+      CURRENCY_ECB_ENABLED: ${CURRENCY_ECB_ENABLED:-false}
+      CURRENCY_ECB_BASE_URL: ${CURRENCY_ECB_BASE_URL:-}
       # ANAHTAR DOĞRULAMASI BURADA VARSAYILAN OLARAK AÇIKTIR ve CRM'in compose'undaki
       # varsayılandan (kapalı) bilinçli olarak ayrılır: orada servis yalnız compose ağında
       # görünür, burada ise 8095 makinenin ağ arayüzünde durur. Ağa açılan bir uç, anahtarsız
@@ -119,7 +125,11 @@ services:
       CURRENCY_RATE_LIMIT: ${CURRENCY_RATE_LIMIT:-120}
       # Bu instance da kur sunar (aynı imaj, aynı Redis cache'i) — zinciri public instance ile
       # AYNI tutmak gerekir, yoksa cache'i hangisinin doldurduğuna göre bülten tarihi oynardı.
+      # Aynı gerekçe ECB için DAHA da güçlüdür: zincirler ayrışsaydı cache'i hangi instance'ın
+      # doldurduğuna göre tüketicinin gördüğü provider alanı tcmb ↔ ecb arasında oynardı.
       CURRENCY_EVDS_KEY: ${CURRENCY_EVDS_KEY:-}
+      CURRENCY_ECB_ENABLED: ${CURRENCY_ECB_ENABLED:-false}
+      CURRENCY_ECB_BASE_URL: ${CURRENCY_ECB_BASE_URL:-}
     ports:
       # YALNIZ LOOPBACK. Önce tüm arayüzlere bağlıydı ("LAN'dan da yönetebileyim") ama bu,
       # sabit bir ev ağı varsayımıydı: burası bir DİZÜSTÜ ve kafede/otelde/okulda bir Wi-Fi'a

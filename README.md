@@ -50,7 +50,7 @@ Bayat kur ise **200**'dür: elinde kullanılabilir veri varken tüketiciyi hatay
 api/controllers  ─ ExchangeRateController      (HTTP sözleşmesi, DTO'ya eşleme)
 business/        ─ ExchangeRateService         (cache-aside + son geçerli kur — TEK yer)
 core/integrations
-  ExchangeRateProvider                          (SOYUTLAMA — ECB buraya eklenir)
+  ExchangeRateProvider                          (SOYUTLAMA — yeni satıcı buraya bağlanır)
   ChainedExchangeRateProvider                   (ÖNCELİK SIRASI — bkz. "Sağlayıcı zinciri")
   evds/  EvdsExchangeRateProvider               (HTTP — 1. sıra, doğru tarih)
          EvdsJsonReader       → dtos/           (JSON → DTO)
@@ -58,6 +58,9 @@ core/integrations
   tcmb/  TcmbExchangeRateProvider               (HTTP — 2. sıra, anahtar istemez)
          TcmbXmlReader        → dtos/           (XML → DTO)
          TcmbRateMapper                         (DTO → domain: yön çevirme, birim, tarih)
+  ecb/   EcbExchangeRateProvider                (HTTP — 3. sıra, BAĞIMSIZ kurum, varsayılan kapalı)
+         EcbXmlReader         → dtos/           (XML → DTO — üç şey de <Cube> adını taşır)
+         EcbRateMapper                          (DTO → domain: ÇAPRAZ kur, çarpan YOK, yalnız bugün)
 dataAccess/      ─ RateCache                    (Redis | bellek)
 entities/        ─ ExchangeRateSnapshot         (domain — satıcıdan bağımsız)
 simulator/       ─ sahte satıcı uçları + kaos   (tüketici testleri için, bkz. aşağıda)
@@ -89,7 +92,8 @@ varsaymaz, gürültülü patlar — o durumda zincir `today.xml`'e iner, yani ha
 | 1 | ~~Saatlik~~ | **YOK** | Aranmadığı için değil, olmadığı için (aşağıya bkz.) |
 | 2 | Bugünkü | **EVDS** | Her satırı kendi günüyle verir |
 | 3 | Bugünkü (yedek) | `today.xml` | Anahtar istemez; tarih etiketi bir gün geriden |
-| 4 | Dünkü / son geçerli | cache (`STALE_CACHE`) | Zincirde değil, `ExchangeRateService`'te |
+| 4 | Bugünkü (**bağımsız**) | **ECB** | Farklı kurum; varsayılan KAPALI; yalnız bugünse konuşur |
+| 5 | Dünkü / son geçerli | cache (`STALE_CACHE`) | Zincirde değil, `ExchangeRateService`'te |
 
 **Saatlik kaynak yoktur.** EVDS'in 671 veri grubu tarandı: günden sık tek bir frekans yok
 (AYLIK 284 · ÜÇ AYLIK 163 · YILLIK 102 · HAFTALIK 88 · İŞ GÜNÜ 21 · GÜNLÜK 10 …), döviz
@@ -105,11 +109,39 @@ kurudur, rakamlar birebir aynıdır. Kazanılan tek şey **doğru tarihtir** —
 davranışını sürdürür. Anahtar düşse bile zincir `today.xml`'e iner — tek anahtar servisi
 düşüremez (tatbikatla doğrulandı).
 
-### Yeni sağlayıcı eklemek (ör. ECB)
+**ECB neden var, ve neyi çözMEZ.** İlk iki basamak **aynı kurumun** iki kapısıdır: o kurum
+erişilemez olduğunda ikisi birden düşer ve elde yalnız kendi bayat kurumuz kalır — TCMB tek
+nokta arızasıydı. ECB farklı kurum, farklı altyapı, farklı ülkedir. **Hafta sonunu çözmez:**
+ECB de hafta sonu yayın yapmaz; yayın boşluğunun cevabı cache'in 7 günlük **saklamasıdır**.
+
+Zincirin **sonundadır** çünkü TRY'nin resmî kurunu TCMB belirler; ECB'nin *referans* kuru
+yakın ama aynı sayı değildir ve iki bölmeyle (çapraz kur) elde edilir:
+
+```
+1 EUR = 50 TRY  ve  1 EUR = 1,25 USD   ⇒   1 TRY = 1,25/50 = 0,025 USD   (1 USD = 40 TRY)
+```
+
+Ve **yalnız bugünün belgesine sahipse konuşur**: ECB'nin günlük dosyası hafta sonu kaybolmaz,
+cumayı göstermeye devam eder. Bu kural olmasaydı her cumartesi sunulan kur TCMB'den ECB'ye
+atlar, hiçbir şey bozulmadığı hâlde rakam kurum değiştirirdi.
+
+> **Birim çarpanı ECB'de YOKTUR.** EVDS/`today.xml` JPY'yi 100 birim üzerinden verir, ECB
+> vermez (`JPY 171.85` = tam olarak 1 EUR = 171,85 JPY). `EvdsRateMapper.UNIT` tablosunu
+> `EcbRateMapper`'a kopyalamak kuru 100 kat bozar ve sonuç yine geçerli bir pozitif sayıdır.
+
+**Kaynak cevapta görünür.** `provider` alanı artık sağlayıcı nesnesinden değil kaydın
+kendisinden (`ExchangeRateSnapshot.source`) okunur: EVDS ve `today.xml` için `tcmb` (aynı
+kurumun aynı kuru — farklı olan yalnız kapıdır ve o log'dadır), ECB için `ecb`. Cache **tek
+yuva** kullanmaya devam eder; yuva başına ayrılsaydı TCMB döndüğünde elde farklı yaşlarda iki
+tablo olurdu.
+
+### Yeni sağlayıcı eklemek
 
 `core/integrations/<satıcı>/` altında `ExchangeRateProvider` uygulaması + kendi DTO'su + kendi
 mapper'ı, sonra `ChainedExchangeRateProvider`'ın kurucusunda sıraya yazılır. Satıcının tel
 formatı o paketten dışarı çıkmaz; API sözleşmesi, cache ve iş katmanı **değişmez**.
+İddia ECB eklenirken fiilen sınandı: yeni paket + zincire bir satır + bir `enabled` bayrağı;
+controller, DTO ve iş katmanı hiç açılmadı.
 
 > Sıra `@Order` anotasyonlarıyla değil **kodda** durur: öncelik bu servisin en kritik
 > kararlarından biridir ve üç dosya açmadan okunabilmelidir.
@@ -128,6 +160,8 @@ curl "localhost:8095/api/v1/rates?symbols=USD,EUR"
 | `currency-api.cache.retention` | `7d` | Saklama: tazelik dolsa da kayıt silinmez |
 | `currency-api.tcmb.base-url` | `https://www.tcmb.gov.tr` | |
 | `CURRENCY_EVDS_KEY` | — | EVDS anahtarı; **boşsa EVDS zincire hiç girmez** (ayrı `enabled` bayrağı yok) |
+| `CURRENCY_ECB_ENABLED` | `false` | ECB basamağı; açıkken sunulan kur **başka bir kurumun** olabilir (cevapta `provider: "ecb"`) |
+| `CURRENCY_ECB_BASE_URL` | `https://www.ecb.europa.eu` | |
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | yalnız `type=redis` iken |
 | `CURRENCY_AUTH_ENABLED` | `false` | anahtar doğrulaması (401) |
 | `CURRENCY_API_KEYS` | — | `anahtar=tuketici,anahtar2=tuketici2` |
@@ -439,7 +473,7 @@ değil **test edilebilirliğin** parçasıdır.
 ## Test
 
 ```bash
-mvn test                                   # 189 test — backend
+mvn test                                   # 230 test — backend
 cd admin-ui && npx ng test --watch=false   # 28 test — admin paneli
 ```
 

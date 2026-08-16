@@ -45,6 +45,24 @@ currency-api:
     lookback: 10d
     connect-timeout: 5s
     read-timeout: 10s
+  ecb:
+    # Avrupa Merkez Bankası — zincirin SON basamağı ve tek BAĞIMSIZ kaynağı.
+    #
+    # EVDS ile today.xml aynı KURUMUN iki kapısıdır: o kurum erişilemez olduğunda ikisi birden
+    # düşer. ECB farklı bir kurum/altyapı/ülkedir; birlikte düşmeleri için ortak sebep yoktur.
+    #
+    # HAFTA SONUNU ÇÖZMEZ: ECB de hafta sonu yayın yapmaz. Yayın boşluğunun cevabı cache'in
+    # 7 günlük saklama penceresidir (son geçerli kur). Dahası sağlayıcı hafta sonu bilinçle
+    # SUSAR — yalnız BUGÜNÜN belgesini kabul eder, yoksa her cumartesi sunulan kur TCMB'den
+    # ECB'ye atlar ve hiçbir şey bozulmadığı hâlde rakam kurum değiştirirdi.
+    #
+    # VARSAYILAN KAPALI: açıldığında sunulan sayı başka bir kurumun kuru olabilir (ECB referans
+    # kuru ≠ TCMB resmî satış kuru). Görünürdür (cevapta provider: "ecb") ama yine de bir
+    # davranış değişikliğidir; bilmeyen bir kurulum imaj güncellemesiyle devralmamalıdır.
+    enabled: ${CURRENCY_ECB_ENABLED:false}
+    base-url: ${CURRENCY_ECB_BASE_URL:https://www.ecb.europa.eu}
+    connect-timeout: 5s
+    read-timeout: 10s
   auth:
     # Varsayılan KAPALI: açık gelseydi anahtar tanımlamamış her kurulum bir anda 401 alırdı.
     # Açıldığında anahtarsız istek kesinlikle reddedilir; anahtar tanımlı değilse servis

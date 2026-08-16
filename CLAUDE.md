@@ -18,10 +18,19 @@ bağımlı değiliz" iddiasını sınayan şeyin kendisi CRM'in parçası olurdu
 Kullanıcıya görünen ürün adı **Pair 3 Kur Servisi**'dir (tanıtım sayfası + admin paneli);
 `currency-api` teknik/depo adıdır ve kod, imaj, ortam değişkeni adlarında DEĞİŞMEZ.
 
+### `oyun/` — kur servisiyle İLGİSİZDİR
+
+`oyun/` altında **Etiya Vampir Köylü** adlı bağımsız bir oyun sunucusu durur (Node, sıfır npm
+bağımlılığı, `oyun/README.md`). Aynı depoda olmasının tek sebebi aynı domaini ve aynı
+Cloudflare tünelini paylaşmasıdır — `admin-ui/` gibi **Maven reaktörüne dahil değildir**,
+kur servisinin hiçbir kodunu kullanmaz, ayrı imaj/ayrı konteyner/ayrı portta (8098,
+`oyun.etiyapi.com`) çalışır. Kur tarafında bir şey değiştirirken `oyun/`'a dokunma; oyunda
+bir şey değiştirirken `mvn test` çalıştırmak gerekmez (`node --test 'oyun/test/*.test.js'`).
+
 ## Komutlar
 
 ```bash
-mvn test                       # 189 birim testi — ALTYAPISIZ (Redis/ağ gerekmez)
+mvn test                       # 230 birim testi — ALTYAPISIZ (Redis/ağ gerekmez)
 mvn spring-boot:run            # http://localhost:8095
 
 # TAM YIĞIN — --force-recreate ZORUNLU, bkz. aşağıdaki not
@@ -47,7 +56,8 @@ JDK'ya bakabilir; `JAVA_HOME` Java 25'i işaret etmelidir.
 api/                 HTTP sözleşmesi — filtreler + controller'lar + DTO'lar
 business/            abstracts/ (arayüz) + concretes/ (uygulama) — kullanım senaryoları
 core/integrations/   ExchangeRateProvider SOYUTLAMASI + Chained… (öncelik sırası); satıcıya
-                     özgü her şey kendi paketinde: tcmb/ (today.xml) · evds/ (EVDS API)
+                     özgü her şey kendi paketinde: tcmb/ (today.xml) · evds/ (EVDS API) ·
+                     ecb/ (eurofxref, çapraz kur)
 core/utilities/      Durumsuz yardımcılar (SecureXml, ApiKeyHasher)
 dataAccess/          RateCache · RateLimiter · ApiKeyStore — her biri memory|redis çiftli
 entities/            Domain modeli — hiçbir satıcının tel formatı değildir
@@ -66,19 +76,27 @@ admin-ui/            Angular admin paneli — bağımsız npm projesi, Maven'a d
   15 dakikada bir çağıran bir tüketici için o sayı **hep dolu** görünüyordu — sayı doğruydu,
   soru yanlıştı. Aynı sayaca ikisini birden yaptırma.
 - **Satıcının tel formatı kendi paketinden ÇIKMAZ.** TCMB'nin XML'i
-  `core/integrations/tcmb/dtos`, EVDS'in JSON'u `core/integrations/evds/dtos` içinde kalır;
-  domaine mapper ile girer. Yeni sağlayıcı (ör. ECB) yalnız `core/integrations/<satıcı>/`
-  altına eklenir + zincire yazılır; API sözleşmesi, cache ve iş katmanı DEĞİŞMEZ.
+  `core/integrations/tcmb/dtos`, EVDS'in JSON'u `core/integrations/evds/dtos`, ECB'nin
+  EUR tabanlı XML'i `core/integrations/ecb/dtos` içinde kalır;
+  domaine mapper ile girer. Yeni sağlayıcı yalnız `core/integrations/<satıcı>/` altına
+  eklenir + zincire yazılır; API sözleşmesi, cache ve iş katmanı DEĞİŞMEZ. **Bu iddia ECB
+  eklenirken fiilen sınandı:** yeni paket + zincire bir satır + bir `enabled` bayrağı; iş
+  katmanı, controller ve DTO'lar hiç açılmadı. Tek istisna `ExchangeRateSnapshot.source`'tur
+  ve o da bilinçlidir — bkz. aşağıdaki `name()` notu.
 - **Satıcı cevabı SINIRSIZ okunmaz.** Gövde `BoundedHttpBody` ile en çok 4 MB okunur
   (`ofString()` boyuta bakmadan tamamını belleğe alırdı). Cevap ağdan gelir; devasa bir gövde
   `-XX:+ExitOnOutOfMemoryError` altında sessiz bir yavaşlama değil, sürecin ölmesi ve her
   istekte tekrarlanan bir kesinti demektir. `SecureXml` ile aynı gerekçe: dış yükün *biçimine*
   değil, *bize ne yaptırabileceğine* bakılır.
-- **Kur yönü her sağlayıcının kendi mapper'ında biter** (`TcmbRateMapper`, `EvdsRateMapper`).
+- **Kur yönü her sağlayıcının kendi mapper'ında biter** (`TcmbRateMapper`, `EvdsRateMapper`,
+  `EcbRateMapper`).
   Yön hatası sessizdir — ters çevrilmiş kur da geçerli bir pozitif sayıdır ve hiçbir
-  doğrulamaya takılmaz. Tek koruma testtir; `EvdsRateMapperTest` ayrıca iki mapper'ın aynı
-  girdi için aynı çıktıyı ürettiğini sabitler.
-- **`EvdsRateMapper.UNIT` tablosu elle tutulur ve yanlışı 100 KATtır.** EVDS,
+  doğrulamaya takılmaz. Tek koruma testtir; `EvdsRateMapperTest` ve `EcbRateMapperTest`
+  ayrıca mapper'ların *aynı gerçek* için aynı çıktıyı ürettiğini sabitler.
+- **Birim çarpanı her satıcıda AYRI bir karardır.** `EvdsRateMapper.UNIT` tablosu elle
+  tutulur ve yanlışı 100 KATtır; `EcbRateMapper`'da ise çarpan **hiç yoktur ve olmamalıdır**
+  (ECB JPY'yi 1 birim üzerinden verir). Tabloyu bir mapper'dan diğerine kopyalamak, tam da
+  bu yüzden en tehlikeli hamledir. EVDS,
   `today.xml`'in `<Unit>` alanının karşılığını **göndermez**: JPY'nin 30.0482 değeri
   "1 JPY = 30 TL" değil "**100** JPY = 30 TL" demektir. Çarpan atlanırsa kur yine geçerli bir
   pozitif sayıdır. Tablo eksik bir para birimi için sessizce 1 varsaymaz, gürültülü patlar.
@@ -101,7 +119,8 @@ görür; kaç yol olduğunu bilmez.
 | 1 | ~~Saatlik~~ | **YOK** | Aranmadığı için değil, **olmadığı için** — aşağıya bkz. |
 | 2 | Bugünkü | **EVDS** (`TP.DK.*.S`) | Her satırı kendi günüyle verir |
 | 3 | Bugünkü (yedek) | `today.xml` | Anahtar istemez; tarih etiketi bir gün geriden |
-| 4 | Dünkü / son geçerli | cache (`STALE_CACHE`) | Zincirde DEĞİL, `ExchangeRateServiceImpl`'de |
+| 4 | Bugünkü (**bağımsız**) | **ECB** (`eurofxref-daily.xml`) | Farklı kurum; varsayılan KAPALI; yalnız bugünse konuşur |
+| 5 | Dünkü / son geçerli | cache (`STALE_CACHE`) | Zincirde DEĞİL, `ExchangeRateServiceImpl`'de |
 
 **Saatlik kaynak yoktur — ölçülerek kanıtlandı.** EVDS'in 671 veri grubunun tamamı tarandı;
 frekanslar AYLIK 284 · ÜÇ AYLIK 163 · YILLIK 102 · HAFTALIK 88 · İŞ GÜNÜ 21 · GÜNLÜK 10 …
@@ -122,14 +141,72 @@ davranışını aynen sürdürür. Ayrı bir `enabled` bayrağı YOKTUR: "açık
 dizesinde `403` alınır) — bu ayrıca URL'leri sırsız tutar, yani log ve stack trace'lerde URL
 basmak güvenlidir.
 
-**`name()` zincire göre DEĞİŞMEZ, `tcmb`de sabittir.** Sağlayıcı adı hem cache anahtarıdır hem
-cevaptaki `provider` alanı; yola göre değişseydi her yol değişiminde cache **bölünür** ve
-tüketicinin gördüğü alan bizim iç seçimimize göre oynardı. İki yol da aynı kurumun aynı
-kurudur, farklı olan yalnız kapıdır — hangi kapıdan girildiği **log'dadır**, sözleşmede değil.
+**ECB neden var, neden 4. sırada ve neden hafta sonunu ÇÖZMEZ.** EVDS ile `today.xml` **aynı
+kurumun** iki kapısıdır: o kurum erişilemez olduğunda ikisi birden düşer ve elde yalnız kendi
+bayat kurumuz kalır — yani TCMB tek nokta arızasıydı. ECB farklı kurum, farklı altyapı, farklı
+ülkedir; birlikte düşmeleri için ortak sebep yoktur. Kapatılan şey budur. **Takvim değildir:**
+ECB de hafta sonu/tatilde yayın yapmaz, o iş cache'in **7 günlük saklamasınındır**. 4. sırada
+olmasının sebebi ise TRY'nin resmî kurunu TCMB'nin belirlemesidir: ECB'nin *referans* kuru
+yakın ama aynı sayı değildir ve **iki bölmeyle** (çapraz kur) elde edilir. ECB bir alternatif
+değil, "hiç kur yok"a karşı bir sigortadır.
+
+**ECB yalnız BUGÜNÜN belgesine sahipse konuşur.** ECB'nin günlük dosyası hafta sonu
+*kaybolmaz*, cuma gününü göstermeye devam eder. Bu kural olmasaydı her cumartesi sunulan kur
+TCMB'den ECB'ye **atlar** ve hiçbir şey bozulmadığı hâlde tüketicinin gördüğü rakam kurum
+değiştirirdi. Bugüne ait değilse `NOT_PUBLISHED` ile susar, servis kendi son geçerli kurunu
+sunar — o kur da TCMB'nindir, yani kurum değişmez.
+
+**`CURRENCY_ECB_ENABLED` varsayılan KAPALIDIR** ve EVDS'in aksine ayrı bir bayrağı vardır:
+ECB anahtar istemediği için "anahtar aynı zamanda düğmedir" hilesi burada kurulamaz. Kapalı
+varsayılanın gerekçesi `auth.enabled` ile aynıdır — bu sağlayıcı **sunulan sayının hangi
+kurumdan geldiğini değiştirebilir** ve bunu bilmeyen bir kurulum imaj güncellemesiyle sessizce
+devralmamalıdır.
+
+**`EcbRateMapper`'da birim çarpanı YOKTUR ve EKLENMEMELİDİR.** EVDS ve `today.xml` JPY'yi 100
+birim üzerinden verir; ECB vermez — `JPY 171.85` satırı tam olarak "1 EUR = 171,85 JPY"dir.
+`EvdsRateMapper.UNIT` tablosunu buraya kopyalamak kuru **100 kat** bozar ve sonuç yine geçerli
+bir pozitif sayıdır. `EcbRateMapperTest` iki mapper'ın *aynı gerçek* için aynı kuru ürettiğini
+sabitler (TCMB "100 JPY = 25 TL" ↔ ECB "1 EUR = 200 JPY, 1 EUR = 50 TRY" → ikisi de 4).
+
+**`name()` zincire göre DEĞİŞMEZ, `tcmb`de sabittir — ama artık cevaptaki `provider` ondan
+gelmez.** Bu ad **cache yuvasının kimliğidir**: yola göre değişseydi cache **bölünür**, ECB'ye
+düşülen bir gün TCMB'nin kaydı ayrı yuvada eskimeye devam eder ve TCMB döndüğünde elde farklı
+yaşlarda iki tablo olurdu. Cevaptaki `provider` alanı ise **kaydın kendisinden** okunur
+(`ExchangeRateSnapshot.source`) ve gerçekten değişir. İki kural çelişmez, farklı soruları
+cevaplar: yuva "bu tabloyu nereye koyayım", `source` "bu sayıyı kim yayınladı". EVDS ve
+`today.xml` için `source` ikisinde de `tcmb`dir — aynı kurumun aynı kuru, farklı olan yalnız
+kapıdır ve hangi kapı olduğu **log'dadır**, sözleşmede değil. ECB için `ecb`dir ve **öyle
+olmalıdır**: başka bir kurumun sayısını TCMB adıyla sunmak, bu servisin bütün kurallarının
+kapatmaya çalıştığı sessiz yanlışlığın ta kendisi olurdu.
 
 Yedek yol tatbikatla doğrulandı (iddia yeterli değildir): bozuk anahtarlı tek kullanımlık bir
 konteynerde EVDS `UNAUTHORIZED` aldı, zincir `today.xml`'e indi, **servis kur sunmayı
 sürdürdü** — yalnız tarih 13.08'e döndü ve tek satır WARN düştü.
+
+**ECB basamağı da tatbikatla doğrulandı (16.08.2026).** TCMB'si ulaşılamaz, EVDS'i anahtarsız,
+cache'i boş tek kullanımlık bir konteyner kuruldu:
+
+1. **Gerçek uçla:** ECB çağrıldı, gerçek belge okundu ve **bilinçle reddedildi** —
+   `ECB belgesi bugune ait degil: belge=2026-08-14 bugun=2026-08-16` (hafta sonu).
+   `NOT_PUBLISHED` işaretlendi, `TRANSPORT` değil; zincirin `combined()`'ı da doğru davrandı ve
+   *gerçek* arızayı (TCMB `TRANSPORT`) takvimin önüne aldı. **"Yalnız bugün" kuralı çalışıyor.**
+2. **Tarihi bugüne çekilmiş GERÇEK belgeyle:** ECB kur sundu, cevapta `provider: "ecb"` yazdı.
+   Sayılar canlı TCMB kurlarıyla karşılaştırıldı:
+
+   | | TCMB (satış) | ECB (çapraz) | fark |
+   |---|---|---|---|
+   | USD | 47,7717 | 47,8844 | +0,24 % |
+   | EUR | 55,0744 | 55,3879 | +0,57 % |
+   | GBP | 64,5356 | 64,8191 | +0,44 % |
+   | JPY | 0,300482 | 0,301136 | **+0,22 %** |
+
+   Fark, *satış* kuru ile *referans* kuru arasında beklenen aralıktadır. **Bu tablo aynı zamanda
+   iki sessiz hatanın da testidir:** yön ters olsaydı sapma binlerce kat, JPY'ye ×100
+   uygulansaydı 30,11 (ya da 0,00301) çıkardı — ikisi de bu tabloda **anında görünürdü**.
+
+Ayrıca `source` alanının eklenmesi **canlıda göç davranışını da gösterdi**: Redis'teki eski kayıt
+`source` taşımadığı için kanonik kurucu patladı, `RedisRateCache` fail-open ile cache-miss saydı
+ve kur bir kez EVDS'ten yeniden çekildi — tek satır WARN, kesinti yok.
 
 ### Fail-open / fail-closed — ikisi de bilinçli
 

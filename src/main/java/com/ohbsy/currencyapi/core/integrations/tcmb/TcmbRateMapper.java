@@ -62,7 +62,7 @@ public class TcmbRateMapper {
         }
 
         return new ExchangeRateSnapshot(CurrencyCode.TRY, rates, rateDate(document),
-                clock.instant());
+                clock.instant(), TcmbExchangeRateProvider.NAME);
     }
 
     /** {@code 1 TL = Unit / ForexSelling} — yön çevirme ve birim düzeltmesi tek satırda. */

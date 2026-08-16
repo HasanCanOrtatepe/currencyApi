@@ -82,7 +82,7 @@ class ExchangeRateServiceImplTest {
     private ExchangeRateSnapshot snapshot(String usdRate, Instant fetchedAt) {
         return new ExchangeRateSnapshot(CurrencyCode.TRY,
                 Map.of(CurrencyCode.USD, new BigDecimal(usdRate)),
-                LocalDate.of(2026, 8, 11), fetchedAt);
+                LocalDate.of(2026, 8, 11), fetchedAt, "tcmb");
     }
 
     private static ProviderUnavailableException outage(ProviderUnavailableException.Reason reason) {

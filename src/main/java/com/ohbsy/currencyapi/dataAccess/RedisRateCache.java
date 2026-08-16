@@ -19,10 +19,15 @@ import java.util.Optional;
  * yenilediğinde tutarın değişmesi bundan doğardı. Kur paylaşılan bir durumdur, dolayısıyla
  * paylaşılan bir yerde durmalıdır.
  *
- * <h2>Anahtar sağlayıcı adını taşır</h2>
- * {@code currency:rates:<provider>} — ileride ECB eklendiğinde iki kaynağın tabloları
- * birbirinin üzerine yazmasın. Sağlayıcı başına ayrı girdi, sağlayıcı başına ayrı tazelik
- * demektir; tek anahtar kullanılsaydı ECB'ye düşen bir cevap TCMB'nin kaydını ezerdi.
+ * <h2>Anahtar sağlayıcı adını taşır — ama zincir TEK yuva kullanır</h2>
+ * {@code currency:rates:<provider>}. Bu depo birden çok yuvayı destekler; kur zinciri yine de
+ * <b>tek</b> yuva kullanır ({@code currency:rates:tcmb}), çünkü yazdığı şey "şu an sunulan kur
+ * tablosu"dur. Sağlayıcı başına ayrı yuva denenseydi ECB'ye düşülen bir günde TCMB'nin kaydı
+ * kendi yuvasında eskimeye devam eder, TCMB döndüğünde elimizde <b>farklı yaşlarda iki tablo</b>
+ * olurdu ve hangisinin sunulacağı yol seçimine bağlı kalırdı.
+ *
+ * <p>Kaydın gerçek kaynağı yuva adından değil <b>kaydın kendisinden</b> okunur
+ * ({@code ExchangeRateSnapshot.source}) — cevaptaki {@code provider} alanı odur.
  *
  * <h2>TTL = retention, tazelik DEĞİL</h2>
  * Redis TTL'i {@code retention}'dır ({@code cache-ttl} değil): kayıt tazelik penceresi
