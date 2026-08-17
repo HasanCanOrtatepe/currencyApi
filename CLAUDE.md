@@ -18,14 +18,27 @@ bağımlı değiliz" iddiasını sınayan şeyin kendisi CRM'in parçası olurdu
 Kullanıcıya görünen ürün adı **Pair 3 Kur Servisi**'dir (tanıtım sayfası + admin paneli);
 `currency-api` teknik/depo adıdır ve kod, imaj, ortam değişkeni adlarında DEĞİŞMEZ.
 
-### `oyun/` — kur servisiyle İLGİSİZDİR
+### `oyun/` ve `sunum/` — kur servisiyle İLGİSİZDİR
 
-`oyun/` altında **Etiya Vampir Köylü** adlı bağımsız bir oyun sunucusu durur (Node, sıfır npm
-bağımlılığı, `oyun/README.md`). Aynı depoda olmasının tek sebebi aynı domaini ve aynı
-Cloudflare tünelini paylaşmasıdır — `admin-ui/` gibi **Maven reaktörüne dahil değildir**,
-kur servisinin hiçbir kodunu kullanmaz, ayrı imaj/ayrı konteyner/ayrı portta (8098,
-`oyun.etiyapi.com`) çalışır. Kur tarafında bir şey değiştirirken `oyun/`'a dokunma; oyunda
-bir şey değiştirirken `mvn test` çalıştırmak gerekmez (`node --test 'oyun/test/*.test.js'`).
+Depoda kur servisiyle **hiçbir kod paylaşmayan** iki Node projesi durur. İkisi de sıfır npm
+bağımlılığına sahiptir, **Maven reaktörüne dahil DEĞİLDİR**, ayrı imaj/ayrı konteyner/ayrı
+portta çalışır ve aynı depoda olmalarının tek sebebi aynı domaini ve aynı Cloudflare tünelini
+paylaşmalarıdır. Kur tarafında bir şey değiştirirken ikisine de dokunma; onlarda bir şey
+değiştirirken `mvn test` çalıştırmak gerekmez.
+
+| Dizin | Ne | Port · hostname | Test |
+|---|---|---|---|
+| `oyun/` | **Etiya Vampir Köylü** oyun sunucusu | 8098 · `oyun.etiyapi.com` | `node --test 'oyun/test/*.test.js'` |
+| `sunum/` | **Sunum destesi** — şifreli + senkron | 8099 · `sunum.etiyapi.com` | — |
+
+`sunum/` desteyi şifre arkasında sunar ve aktif slaytı sunucuda tutar: biri ilerlettiğinde
+herkesin ekranı birlikte geçer (SSE). **Desteyi DÜZENLEMEZ** — `sunum/public/deste.html`
+konuşmacının dosyasının birebir kopyasıdır, senkron kancası sunum anında enjekte edilir; çapa
+bulunamazsa sunucu **hiç açılmaz** (sessizce senkronsuz açılmak sahnede fark edilirdi).
+Ayrıntı: `sunum/README.md`.
+
+**Tünelde artık üç hostname var** (`~/.cloudflared/config.yml`): `kur` → 8095, `oyun` → 8098,
+`sunum` → 8099. Admin yüzeyleri (8096/8097) hâlâ **bilinçli olarak yoktur.**
 
 ## Komutlar
 

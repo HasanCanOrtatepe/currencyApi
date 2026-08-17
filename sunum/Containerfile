@@ -1,0 +1,31 @@
+# Pair 3 Sunum sunucusu imajı.
+#
+# Kur servisinin ve oyunun Containerfile'larından TAMAMEN AYRIDIR: bu üç şey hiçbir kod
+# paylaşmaz, yalnız aynı makinede ve aynı domainde durur. Ortak bir imaj, sunumda yapılan
+# bir değişikliğin kur servisini yeniden dağıtmayı gerektirmesi demek olurdu.
+#
+# Derleme adımı YOK: bağımlılık olmadığı için `npm install` de yoktur. Bir sunum
+# sunucusunun bağımlılık ağacı taşıması, sunumdan bir gün önce kırılabilecek bir şey daha
+# eklemek olurdu.
+
+FROM docker.io/library/node:22-alpine
+
+WORKDIR /app
+COPY package.json ./
+COPY src ./src
+COPY public ./public
+
+# Root'la çalışmaz: bu, internete (tünel üzerinden) açık bir yüzeydir ve dosya sistemine
+# hiç yazmaz — durum tamamen bellektedir.
+RUN chown -R node:node /app
+USER node
+
+ENV SUNUM_PORT=8099
+EXPOSE 8099
+
+# SAĞLIK KONTROLÜ BURADA DEĞİL, compose'dadır — oyun/Containerfile ile aynı gerekçe:
+# Podman imajları OCI biçiminde derler ve OCI'de HEALTHCHECK alanı YOKTUR. Buraya
+# yazılsaydı derlemede "ignored" uyarısıyla sessizce düşer, imaj sağlıklı görünür ama hiç
+# yoklanmazdı (ölçülerek görüldü).
+
+CMD ["node", "src/server.js"]

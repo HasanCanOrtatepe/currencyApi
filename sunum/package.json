@@ -1,0 +1,13 @@
+{
+  "name": "pair3-sunum",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pair 3 sunum sunucusu — şifreli, senkron slayt destesi (sunum.etiyapi.com)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

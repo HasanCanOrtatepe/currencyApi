@@ -1,0 +1,51 @@
+# Pair 3 Sunum sunucusu — sunum.etiyapi.com
+#
+# Kur servisinin ve oyunun compose'larından AYRI bir yığındır ve bu bilinçlidir: sunumda
+# bir değişiklik yaptığında kur servisi hiç durmaz; kur servisi güncellendiğinde sunum
+# kopmaz — sahnede yaşanacak en kötü şey budur.
+#
+#   cd sunum && podman compose up -d --build --force-recreate
+#
+# --force-recreate ZORUNLUDUR: yalnız --build ile imaj yeniden derlenir ama konteyner
+# YENİDEN OLUŞTURULMAYABİLİR ve eski desteyi sunmaya devam eder. Arıza sessizdir.
+# Doğrulama: `podman ps` çıktısındaki Up süresi dağıtımdan yeni olmalıdır.
+
+services:
+  sunum:
+    build:
+      context: .
+      dockerfile: Containerfile
+    container_name: pair3-sunum
+    # Durum BELLEKTE: tek bir tamsayı (aktif slayt) ve açık SSE bağlantıları. Veritabanı
+    # yok, dosyaya yazma yok.
+    mem_limit: 128m
+    environment:
+      SUNUM_PORT: "8099"
+      # ŞİFRE .env'DEN GELİR, BU DOSYAYA YAZILMAZ. Tanımsızsa sunucu açılışta düşer —
+      # şifresiz açılmak, şifreli olacak diye kurulmuş bir yüzeyi herkese açmaktır.
+      SUNUM_SIFRE: ${SUNUM_SIFRE:?sunum/.env icinde SUNUM_SIFRE tanimli olmali}
+      # Verilirse konteyner yeniden başlatıldığında oturumlar KORUNUR (kimse tekrar şifre
+      # girmez). Verilmezse her açılışta rastgele üretilir — sunum günü için önerilir.
+      SUNUM_CEREZ_ANAHTARI: ${SUNUM_CEREZ_ANAHTARI:-}
+      # Şifre denemesi sayacının kimliği. Tünel arkasında socket adresi TÜM trafik için
+      # aynıdır (kur servisinde ölçüldü) — o hâliyle tek bir kaba kuvvet denemesi sunumdan
+      # beş dakika önce EKİBİ kilitlerdi.
+      SUNUM_IP_BASLIGI: ${SUNUM_IP_BASLIGI:-cf-connecting-ip}
+    ports:
+      # 8099 LAN'a açılır; internete açan şey Cloudflare tünelidir (sunum.etiyapi.com).
+      # Kur servisinin 8095'ine ve oyunun 8098'ine hiç dokunulmaz.
+      - "8099:8099"
+    healthcheck:
+      # Node'un kendi fetch'iyle: imajda curl/wget YOKTUR ve yalnız sağlık kontrolü için
+      # bir paket eklemek, saldırı yüzeyini kontrolün değerinden fazla büyütürdü.
+      # /saglik ŞİFRESİZDİR — orkestratörün elinde şifre yoktur.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8099/saglik').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    # Makine yeniden başladığında konteyner tek başına GERİ GELMEZ: `unless-stopped` yalnız
+    # konteyner ÇÖKERSE devreye girer. Podman VM'i yeniden başladığında yığını geri getiren
+    # şey VM içindeki kullanıcı seviyesi `podman-restart.service` + `loginctl enable-linger`
+    # zinciridir (kur servisi için kurulmuştur, bu konteyneri de kapsar).
+    restart: unless-stopped
